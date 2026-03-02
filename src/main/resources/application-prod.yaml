@@ -1,0 +1,10 @@
+spring:
+  r2dbc:
+    url: ${SPRING_R2DBC_URL}${POSTGRES_DB}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    pool:
+      initial-size: 5
+      max-size: 10
+      max-idle-time: 30m
+      validation-query: SELECT 1

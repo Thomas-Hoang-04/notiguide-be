@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: notiguide
+
+  config:
+    import: optional:application-${spring.profiles.active}.yaml
+
+  jackson:
+    time-zone: UTC
+
+server:
+  forward-headers-strategy: framework
