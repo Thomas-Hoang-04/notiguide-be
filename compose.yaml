@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: 'postgres:17.6-bookworm'
+    image: 'timescale/timescaledb:latest-pg17'
     container_name: postgres
     restart: unless-stopped
 
@@ -25,14 +25,22 @@ services:
 
     networks:
       - notiguide
-#
-#  redis:
-#    image: 'redis:latest'
-#    container_name: redis
-#    restart: unless-stopped
-#
-#    ports:
-#      - '6379:6379'
+
+  redis:
+    image: 'redis:8.6.1-alpine'
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf
+
+    ports:
+      - '6379:6379'
+
+    volumes:
+      - ./src/main/resources/redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - notiguide-redis:/data
+
+    networks:
+      - notiguide
 
 volumes:
   notiguide:

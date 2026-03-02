@@ -41,3 +41,5 @@ out/
 
 .env
 **/firebase/**
+redis.conf
+schema.sql
