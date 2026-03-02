@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: 'postgres:17.6-bookworm'
+    container_name: postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data
+
+    ports:
+      - '5432:5432'
+
+    volumes:
+      - notiguide:/var/lib/postgresql/data
+      - ./src/main/resources/db:/docker-entrypoint-initdb.d
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - notiguide
+#
+#  redis:
+#    image: 'redis:latest'
+#    container_name: redis
+#    restart: unless-stopped
+#
+#    ports:
+#      - '6379:6379'
+
+volumes:
+  notiguide:
+    name: notiguide
+
+  notiguide-redis:
+    name: notiguide-redis
+
+networks:
+  notiguide:
+    name: notiguide
+

@@ -1,0 +1,9 @@
+.git
+.gitignore
+.gitattributes
+.gradle
+.idea
+.kotlin
+build
+*.md
+http-test
