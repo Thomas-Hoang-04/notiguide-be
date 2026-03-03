@@ -3,8 +3,9 @@ package com.thomas.notiguide.domain.queue.repository
 import com.thomas.notiguide.core.redis.RedisKeyManager
 import com.thomas.notiguide.core.redis.RedisTTLPolicy
 import kotlinx.coroutines.reactor.awaitSingle
-import kotlinx.coroutines.reactor.awaitSingleOrNull
 import org.springframework.data.redis.core.ReactiveRedisTemplate
+import org.springframework.data.redis.core.getAndAwait
+import org.springframework.data.redis.core.putAllAndAwait
 import org.springframework.stereotype.Repository
 import java.time.Instant
 import java.util.UUID
@@ -17,25 +18,23 @@ class RedisTicketRepository(
     suspend fun createTicket(storeId: UUID, ticketId: UUID, number: String): Boolean {
         val key = RedisKeyManager.ticket(storeId, ticketId)
         redis.opsForHash<String, String>()
-            .putAll(key, mapOf(
+            .putAllAndAwait(key, mapOf(
                 "store_id" to storeId.toString(),
                 "number" to number,
                 "status" to "WAITING",
                 "issued_at" to Instant.now().epochSecond.toString()
             ))
-            .awaitSingle()
         return redis.expire(key, RedisTTLPolicy.TICKET_WAITING).awaitSingle()
     }
 
     suspend fun markCalled(storeId: UUID, ticketId: UUID, counterId: String?): Boolean {
         val key = RedisKeyManager.ticket(storeId, ticketId)
         redis.opsForHash<String, String>()
-            .putAll(key, buildMap {
+            .putAllAndAwait(key, buildMap {
                 put("status", "CALLED")
                 put("called_at", Instant.now().epochSecond.toString())
                 if (counterId != null) put("counter_id", counterId)
             })
-            .awaitSingle()
         return redis.expire(key, RedisTTLPolicy.TICKET_CALLED).awaitSingle()
     }
 
@@ -55,8 +54,7 @@ class RedisTicketRepository(
 
     suspend fun getStatus(storeId: UUID, ticketId: UUID): String? =
         redis.opsForHash<String, String>()
-            .get(RedisKeyManager.ticket(storeId, ticketId), "status")
-            .awaitSingleOrNull()
+            .getAndAwait(RedisKeyManager.ticket(storeId, ticketId), "status")
 
     suspend fun exists(storeId: UUID, ticketId: UUID): Boolean =
         redis.hasKey(RedisKeyManager.ticket(storeId, ticketId)).awaitSingle()

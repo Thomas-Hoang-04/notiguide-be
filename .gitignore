@@ -43,3 +43,4 @@ out/
 **/firebase/**
 redis.conf
 schema.sql
+NOTES.txt

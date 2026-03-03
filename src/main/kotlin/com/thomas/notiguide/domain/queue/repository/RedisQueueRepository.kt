@@ -2,11 +2,10 @@ package com.thomas.notiguide.domain.queue.repository
 
 import com.thomas.notiguide.core.redis.RedisKeyManager
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.reactive.asFlow
-import kotlinx.coroutines.reactor.awaitSingle
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.reactor.awaitSingleOrNull
 import org.springframework.data.domain.Range
-import org.springframework.data.redis.core.ReactiveRedisTemplate
+import org.springframework.data.redis.core.*
 import org.springframework.stereotype.Repository
 import java.time.Instant
 import java.util.UUID
@@ -18,8 +17,7 @@ class RedisQueueRepository(
 
     suspend fun addToQueue(storeId: UUID, ticketId: UUID): Boolean =
         redis.opsForZSet()
-            .add(RedisKeyManager.queue(storeId), ticketId.toString(), Instant.now().toEpochMilli().toDouble())
-            .awaitSingle()
+            .addAndAwait(RedisKeyManager.queue(storeId), ticketId.toString(), Instant.now().toEpochMilli().toDouble())
 
     suspend fun peekNext(storeId: UUID): String? =
         redis.opsForZSet()
@@ -37,31 +35,26 @@ class RedisQueueRepository(
 
     suspend fun removeFromQueue(storeId: UUID, ticketId: UUID): Long =
         redis.opsForZSet()
-            .remove(RedisKeyManager.queue(storeId), ticketId.toString())
-            .awaitSingle()
+            .removeAndAwait(RedisKeyManager.queue(storeId), ticketId.toString())
 
     suspend fun getQueueSize(storeId: UUID): Long =
         redis.opsForZSet()
-            .size(RedisKeyManager.queue(storeId))
-            .awaitSingle()
+            .sizeAndAwait(RedisKeyManager.queue(storeId))
 
     suspend fun getQueuePosition(storeId: UUID, ticketId: UUID): Long? =
         redis.opsForZSet()
-            .rank(RedisKeyManager.queue(storeId), ticketId.toString())
-            .awaitSingleOrNull()
+            .rankAndAwait(RedisKeyManager.queue(storeId), ticketId.toString())
 
     suspend fun addToServing(storeId: UUID, ticketId: UUID): Long =
         redis.opsForSet()
-            .add(RedisKeyManager.serving(storeId), ticketId.toString())
-            .awaitSingle()
+            .addAndAwait(RedisKeyManager.serving(storeId), ticketId.toString())
 
     suspend fun removeFromServing(storeId: UUID, ticketId: UUID): Long =
         redis.opsForSet()
-            .remove(RedisKeyManager.serving(storeId), ticketId.toString())
-            .awaitSingle()
+            .removeAndAwait(RedisKeyManager.serving(storeId), ticketId.toString())
 
-    fun getServingTickets(storeId: UUID): Flow<Any> =
+    fun getServingTickets(storeId: UUID): Flow<String> =
         redis.opsForSet()
-            .members(RedisKeyManager.serving(storeId))
-            .asFlow()
+            .membersAsFlow(RedisKeyManager.serving(storeId))
+            .map { it.toString() }
 }

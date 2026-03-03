@@ -8,3 +8,7 @@ spring:
       max-size: 10
       max-idle-time: 30m
       validation-query: SELECT 1
+
+  data:
+    redis:
+      password: ${REDIS_PASSWORD}
