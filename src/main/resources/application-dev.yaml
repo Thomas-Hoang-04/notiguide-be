@@ -12,3 +12,10 @@ spring:
   data:
     redis:
       password: ${REDIS_PASSWORD}
+
+jwt:
+  private-key: classpath:rsa/notiguide.pem
+  public-key: classpath:rsa/notiguide-pub.pem
+
+rate-limit:
+  enabled: false
