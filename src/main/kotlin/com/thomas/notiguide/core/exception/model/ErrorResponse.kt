@@ -2,10 +2,10 @@ package com.thomas.notiguide.core.exception.model
 
 import java.time.LocalDateTime
 
-data class ErrorResponse<T>(
+data class ErrorResponse(
     val timestamp: LocalDateTime,
     val code: Int,
-    val error: Class<T>,
+    val error: String,
     val message: String,
     val path: String,
     val method: String
