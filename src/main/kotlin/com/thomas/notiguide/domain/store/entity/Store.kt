@@ -1,0 +1,44 @@
+package com.thomas.notiguide.domain.store.entity
+
+import com.thomas.notiguide.domain.store.dto.StoreDto
+import org.springframework.data.annotation.CreatedDate
+import org.springframework.data.annotation.Id
+import org.springframework.data.annotation.LastModifiedDate
+import org.springframework.data.relational.core.mapping.Column
+import org.springframework.data.relational.core.mapping.Table
+import java.time.OffsetDateTime
+import java.util.UUID
+
+@Table("store")
+data class Store(
+    @Id
+    @Column("id")
+    val id: UUID? = null,
+
+    @Column("name")
+    val name: String,
+
+    @Column("address")
+    val address: String? = null,
+
+    @Column("is_active")
+    val isActive: Boolean = true,
+
+    @CreatedDate
+    @Column("created_at")
+    val createdAt: OffsetDateTime? = null,
+
+    @LastModifiedDate
+    @Column("updated_at")
+    val updatedAt: OffsetDateTime? = null
+) {
+
+    fun toDto(): StoreDto = StoreDto(
+        id = id!!,
+        name = name,
+        address = address,
+        isActive = isActive,
+        createdAt = createdAt,
+        updatedAt = updatedAt
+    )
+}
