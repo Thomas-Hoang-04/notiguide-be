@@ -15,17 +15,42 @@ import java.util.UUID
 
 @Table("admin")
 data class Admin(
-    @Id val id: UUID? = null,
+    @Id
+    @Column("id")
+    val id: UUID? = null,
+
+    @Column("username")
     val username: String,
-    @Column("password_hash") val passwordHash: String,
-    val role: AdminRole,
-    @Column("store_id") val storeId: UUID? = null,
-    @Column("is_verified") val isVerified: Boolean = false,
-    @CreatedBy @Column("created_by") val createdBy: UUID? = null,
-    @Column("verified_by") val verifiedBy: UUID? = null,
-    @Column("verified_at") val verifiedAt: OffsetDateTime? = null,
-    @CreatedDate @Column("created_at") val createdAt: OffsetDateTime? = null,
-    @LastModifiedDate @Column("updated_at") val updatedAt: OffsetDateTime? = null
+
+    @Column("password_hash")
+    val passwordHash: String,
+
+    @Column("role")
+    val role: AdminRole = AdminRole.ROLE_ADMIN,
+
+    @Column("store_id")
+    val storeId: UUID? = null,
+
+    @Column("is_verified")
+    val isVerified: Boolean = false,
+
+    @CreatedBy
+    @Column("created_by")
+    val createdBy: UUID? = null,
+
+    @Column("verified_by")
+    val verifiedBy: UUID? = null,
+
+    @Column("verified_at")
+    val verifiedAt: OffsetDateTime? = null,
+
+    @CreatedDate
+    @Column("created_at")
+    val createdAt: OffsetDateTime? = null,
+
+    @LastModifiedDate
+    @Column("updated_at")
+    val updatedAt: OffsetDateTime? = null
 ) {
 
     fun toDto(): AdminDto = AdminDto(

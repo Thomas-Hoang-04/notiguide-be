@@ -7,6 +7,7 @@ import com.thomas.notiguide.domain.admin.request.CreateAdminRequest
 import com.thomas.notiguide.domain.admin.request.UpdatePasswordRequest
 import com.thomas.notiguide.domain.admin.service.AdminService
 import com.thomas.notiguide.shared.principal.AdminPrincipal
+import com.thomas.notiguide.shared.principal.StoreAccessUtil
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -81,10 +82,7 @@ class AdminController(
         @RequestParam storeId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<List<AdminDto>> {
-        if (principal.authorities.none { it.authority == AdminRole.ROLE_SUPER_ADMIN.name }) {
-            if (principal.storeId != storeId)
-                throw ForbiddenException("You can only view admins in your own store")
-        }
+        StoreAccessUtil.requireStoreAccess(principal, storeId)
         val admins = adminService.listAdminsByStore(storeId)
         return ResponseEntity.ok(admins)
     }
