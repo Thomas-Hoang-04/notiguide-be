@@ -39,7 +39,7 @@ class SecurityConfig(
         .authorizeExchange {
             it.pathMatchers(
                 "/api/auth/**",
-                "/api/queue/**",
+                "/api/queue/public/**",
                 "/actuator/health",
                 "/actuator/info"
             ).permitAll()
