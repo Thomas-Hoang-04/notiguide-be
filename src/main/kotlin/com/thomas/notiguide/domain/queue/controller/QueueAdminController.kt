@@ -1,6 +1,7 @@
 package com.thomas.notiguide.domain.queue.controller
 
 import com.thomas.notiguide.domain.queue.dto.NextTicketResponse
+import com.thomas.notiguide.domain.queue.dto.QueueSizeResponse
 import com.thomas.notiguide.domain.queue.dto.TicketStatusResponse
 import com.thomas.notiguide.domain.queue.service.QueueService
 import com.thomas.notiguide.domain.queue.types.CallNextResult
@@ -21,6 +22,16 @@ import java.util.UUID
 class QueueAdminController(
     private val queueService: QueueService
 ) {
+
+    @GetMapping("/size")
+    suspend fun getQueueSize(
+        @PathVariable storeId: UUID,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<QueueSizeResponse> {
+        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        val queueSize = queueService.getQueueSize(storeId)
+        return ResponseEntity.ok(QueueSizeResponse(queueSize = queueSize))
+    }
 
     @GetMapping("/tickets/{ticketId}")
     suspend fun getTicketStatus(

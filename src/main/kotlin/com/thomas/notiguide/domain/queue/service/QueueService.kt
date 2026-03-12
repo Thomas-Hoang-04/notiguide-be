@@ -10,10 +10,12 @@ import com.thomas.notiguide.domain.queue.repository.RedisCounterRepository
 import com.thomas.notiguide.domain.queue.repository.RedisQueueRepository
 import com.thomas.notiguide.domain.queue.repository.RedisTicketRepository
 import com.thomas.notiguide.domain.queue.types.CallNextResult
+import com.thomas.notiguide.domain.queue.types.TicketStatus
 import com.thomas.notiguide.domain.store.repository.StoreRepository
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.reactor.awaitSingleOrNull
+import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.ReactiveRedisTemplate
 import org.springframework.data.redis.core.ScanOptions
 import org.springframework.data.redis.core.script.RedisScript
@@ -30,8 +32,11 @@ class QueueService(
     private val redisCounterRepository: RedisCounterRepository,
     private val redis: ReactiveRedisTemplate<String, Any>
 ) {
+    private val log = LoggerFactory.getLogger(this::class.java)
 
     companion object {
+        private const val CALL_NEXT_MAX_RETRIES = 10
+
         private val ISSUE_TICKET_SCRIPT = RedisScript.of(
             """
             local queueKey = KEYS[1]
@@ -44,7 +49,7 @@ class QueueService(
             local ttlSeconds = ARGV[6]
 
             redis.call('ZADD', queueKey, score, ticketId)
-            redis.call('HSET', ticketKey, 'store_id', storeId, 'number', number, 'status', 'WAITING', 'issued_at', issuedAt)
+            redis.call('HSET', ticketKey, 'store_id', storeId, 'number', number, 'status', '${TicketStatus.WAITING.name}', 'issued_at', issuedAt)
             redis.call('EXPIRE', ticketKey, ttlSeconds)
 
             return 1
@@ -74,7 +79,7 @@ class QueueService(
                 local exists = redis.call('EXISTS', ticketKey)
                 if exists == 1 then
                     redis.call('SADD', servingKey, ticketId)
-                    redis.call('HSET', ticketKey, 'status', 'CALLED', 'called_at', calledAt)
+                    redis.call('HSET', ticketKey, 'status', '${TicketStatus.CALLED.name}', 'called_at', calledAt)
                     if counterId ~= '' then
                         redis.call('HSET', ticketKey, 'counter_id', counterId)
                     end
@@ -111,15 +116,17 @@ class QueueService(
                 now.toEpochMilli().toString(),
                 storeId.toString(),
                 number.toString(),
-                now.epochSecond.toString(),
+                now.toEpochMilli().toString(),
                 RedisTTLPolicy.TICKET_WAITING.toSeconds().toString()
             )
         ).next().awaitSingle()
 
+        log.info("Ticket issued: store={} ticket={} number={}", storeId, ticketId, number)
+
         return TicketDto(
             id = ticketId,
             number = number.toString(),
-            status = "WAITING",
+            status = TicketStatus.WAITING,
             issuedAt = now,
             calledAt = null,
             position = redisQueueRepository.getQueuePosition(storeId, ticketId)?.plus(1)
@@ -134,7 +141,7 @@ class QueueService(
         val position = redisQueueRepository.getQueuePosition(storeId, ticketId)?.plus(1)
 
         return TicketStatusResponse(
-            status = ticket["status"] ?: "UNKNOWN",
+            status = TicketStatus.from(ticket["status"]),
             positionInQueue = position
         )
     }
@@ -142,7 +149,7 @@ class QueueService(
     suspend fun callNext(storeId: UUID, counterId: String?): CallNextResult {
         val queueKey = RedisKeyManager.queue(storeId)
         val servingKey = RedisKeyManager.serving(storeId)
-        val ticketKeyPrefix = "ticket:$storeId:"
+        val ticketKeyPrefix = RedisKeyManager.ticketKeyPrefix(storeId)
 
         val result = redis.execute(
             CALL_NEXT_SCRIPT,
@@ -151,63 +158,99 @@ class QueueService(
                 RedisTTLPolicy.TICKET_CALLED.toSeconds().toString(),
                 ticketKeyPrefix,
                 counterId ?: "",
-                Instant.now().epochSecond.toString()
+                Instant.now().toEpochMilli().toString()
             )
         ).next().awaitSingleOrNull()
 
-        if (result.isNullOrEmpty() || result[0] == "QUEUE_EMPTY")
+        if (result.isNullOrEmpty())
             return CallNextResult.QueueEmpty
 
-        val ticketIdStr = result[1] as? String ?: return CallNextResult.QueueEmpty
-        val ticketId = UUID.fromString(ticketIdStr)
+        val scriptStatus = result[0]?.toString()
+        if (scriptStatus == "QUEUE_EMPTY")
+            return CallNextResult.QueueEmpty
+
+        val ticketIdStr = result.getOrNull(1)?.toString() ?: return CallNextResult.QueueEmpty
+        val ticketId = runCatching { UUID.fromString(ticketIdStr) }.getOrElse { return CallNextResult.QueueEmpty }
 
         val ticketData = redisTicketRepository.getTicket(storeId, ticketId)
-        if (ticketData.isEmpty()) return CallNextResult.GhostTicketSkipped
+        if (ticketData.isEmpty()) {
+            // Lua already moved this ticket into serving; remove stale member immediately.
+            redisQueueRepository.removeFromServing(storeId, ticketId)
+            return CallNextResult.GhostTicketSkipped
+        }
+
+        log.info("Ticket called: store={} ticket={} counter={}", storeId, ticketId, counterId)
 
         return CallNextResult.Success(
             TicketDto(
                 id = ticketId,
                 number = ticketData["number"] ?: "",
-                status = ticketData["status"] ?: "CALLED",
-                issuedAt = ticketData["issued_at"]?.toLongOrNull()?.let { Instant.ofEpochSecond(it) },
-                calledAt = ticketData["called_at"]?.toLongOrNull()?.let { Instant.ofEpochSecond(it) },
+                status = TicketStatus.from(ticketData["status"]).let {
+                    if (it == TicketStatus.UNKNOWN) TicketStatus.CALLED else it
+                },
+                issuedAt = parseStoredTimestamp(ticketData["issued_at"]),
+                calledAt = parseStoredTimestamp(ticketData["called_at"]),
                 position = null
             )
         )
     }
 
     suspend fun callNextUntilSuccess(storeId: UUID, counterId: String?): CallNextResult {
-        while (true) {
+        repeat(CALL_NEXT_MAX_RETRIES) {
             when (val result = callNext(storeId, counterId)) {
-                is CallNextResult.GhostTicketSkipped -> continue
+                is CallNextResult.GhostTicketSkipped -> Unit
                 else -> return result
             }
         }
+        return CallNextResult.QueueEmpty
     }
 
     suspend fun serveTicket(storeId: UUID, ticketId: UUID) {
         val ticket = redisTicketRepository.getTicket(storeId, ticketId)
-        if (ticket.isEmpty())
-            throw NotFoundException("Ticket", "id", ticketId.toString())
+        if (ticket.isEmpty()) {
+            redisQueueRepository.removeFromQueue(storeId, ticketId)
+            redisQueueRepository.removeFromServing(storeId, ticketId)
+            log.info("Ticket serve idempotent no-op: store={} ticket={}", storeId, ticketId)
+            return
+        }
 
+        val status = TicketStatus.from(ticket["status"])
         // TODO: emit analytics event with wait_duration_seconds
         redisTicketRepository.markServed(storeId, ticketId)
-        redisQueueRepository.removeFromServing(storeId, ticketId)
+
+        when (status) {
+            TicketStatus.CALLED -> redisQueueRepository.removeFromServing(storeId, ticketId)
+            else -> {
+                redisQueueRepository.removeFromQueue(storeId, ticketId)
+                redisQueueRepository.removeFromServing(storeId, ticketId)
+            }
+        }
+
+        log.info("Ticket served: store={} ticket={} previous_status={}", storeId, ticketId, status)
     }
 
     suspend fun cancelTicket(storeId: UUID, ticketId: UUID) {
         val ticket = redisTicketRepository.getTicket(storeId, ticketId)
-        if (ticket.isEmpty())
-            throw NotFoundException("Ticket", "id", ticketId.toString())
+        if (ticket.isEmpty()) {
+            redisQueueRepository.removeFromQueue(storeId, ticketId)
+            redisQueueRepository.removeFromServing(storeId, ticketId)
+            log.info("Ticket cancel idempotent no-op: store={} ticket={}", storeId, ticketId)
+            return
+        }
 
-        val status = ticket["status"]
+        val status = TicketStatus.from(ticket["status"])
         // TODO: emit analytics event with wait_duration_seconds
         redisTicketRepository.markCancelled(storeId, ticketId)
 
         when (status) {
-            "WAITING" -> redisQueueRepository.removeFromQueue(storeId, ticketId)
-            "CALLED" -> redisQueueRepository.removeFromServing(storeId, ticketId)
+            TicketStatus.WAITING -> redisQueueRepository.removeFromQueue(storeId, ticketId)
+            TicketStatus.CALLED -> redisQueueRepository.removeFromServing(storeId, ticketId)
+            else -> {
+                redisQueueRepository.removeFromQueue(storeId, ticketId)
+                redisQueueRepository.removeFromServing(storeId, ticketId)
+            }
         }
+        log.info("Ticket cancelled: store={} ticket={} previous_status={}", storeId, ticketId, status)
     }
 
     suspend fun cleanupServingSet(storeId: UUID): Int {
@@ -223,16 +266,23 @@ class QueueService(
         return cleaned
     }
 
+    suspend fun getQueueSize(storeId: UUID): Long =
+        redisQueueRepository.getQueueSize(storeId)
+
     suspend fun clearStoreData(storeId: UUID) {
         val queueKey = RedisKeyManager.queue(storeId)
         val servingKey = RedisKeyManager.serving(storeId)
-        val counterKey = RedisKeyManager.counter(storeId)
 
         redis.delete(queueKey).awaitSingle()
         redis.delete(servingKey).awaitSingle()
-        redis.delete(counterKey).awaitSingle()
 
-        redis.scan(ScanOptions.scanOptions().match("ticket:$storeId:*").count(100).build())
+        // Scan-delete counter keys (date suffix varies by timezone) and ticket keys
+        redis.scan(ScanOptions.scanOptions().match(RedisKeyManager.counterPattern(storeId)).count(100).build())
+            .flatMap { key -> redis.delete(key) }
+            .collectList()
+            .awaitSingle()
+
+        redis.scan(ScanOptions.scanOptions().match(RedisKeyManager.ticketPattern(storeId)).count(100).build())
             .flatMap { key -> redis.delete(key) }
             .collectList()
             .awaitSingle()
@@ -248,10 +298,15 @@ class QueueService(
         return TicketDto(
             id = ticketId,
             number = ticket["number"] ?: "",
-            status = ticket["status"] ?: "UNKNOWN",
-            issuedAt = ticket["issued_at"]?.toLongOrNull()?.let { Instant.ofEpochSecond(it) },
-            calledAt = ticket["called_at"]?.toLongOrNull()?.let { Instant.ofEpochSecond(it) },
+            status = TicketStatus.from(ticket["status"]),
+            issuedAt = parseStoredTimestamp(ticket["issued_at"]),
+            calledAt = parseStoredTimestamp(ticket["called_at"]),
             position = position
         )
+    }
+
+    private fun parseStoredTimestamp(rawValue: String?): Instant? {
+        val numeric = rawValue?.toLongOrNull() ?: return null
+        return if (numeric > 9_999_999_999L) Instant.ofEpochMilli(numeric) else Instant.ofEpochSecond(numeric)
     }
 }
