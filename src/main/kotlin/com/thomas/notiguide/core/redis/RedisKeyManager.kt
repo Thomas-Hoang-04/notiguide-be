@@ -7,7 +7,10 @@ object RedisKeyManager {
     fun queue(storeId: UUID) = "store:$storeId:queue"
     fun serving(storeId: UUID) = "store:$storeId:serving"
     fun ticket(storeId: UUID, ticketId: UUID) = "ticket:$storeId:$ticketId"
-    fun counter(storeId: UUID, date: LocalDate = LocalDate.now()) = "store:$storeId:counter:$date"
+    fun ticketKeyPrefix(storeId: UUID) = "ticket:$storeId:"
+    fun counter(storeId: UUID, date: LocalDate) = "store:$storeId:counter:$date"
+    fun counterPattern(storeId: UUID) = "store:$storeId:counter:*"
+    fun ticketPattern(storeId: UUID) = "ticket:$storeId:*"
 
     fun isTicketKey(key: String) = key.startsWith("ticket:")
 
