@@ -2,6 +2,7 @@ package com.thomas.notiguide.domain.admin.controller
 
 import com.thomas.notiguide.core.exception.ForbiddenException
 import com.thomas.notiguide.domain.admin.dto.AdminDto
+import com.thomas.notiguide.domain.admin.dto.AdminPageResponse
 import com.thomas.notiguide.domain.admin.types.AdminRole
 import com.thomas.notiguide.domain.admin.request.CreateAdminRequest
 import com.thomas.notiguide.domain.admin.request.UpdatePasswordRequest
@@ -41,7 +42,7 @@ class AdminController(
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<AdminDto> {
         requireSuperAdmin(principal)
-        val dto = adminService.createAdmin(request)
+        val dto = adminService.createAdmin(request, principal.id)
         return ResponseEntity.status(HttpStatus.CREATED).body(dto)
     }
 
@@ -78,12 +79,19 @@ class AdminController(
     }
 
     @GetMapping
-    suspend fun listAdminsByStore(
-        @RequestParam storeId: UUID,
+    suspend fun listAdmins(
+        @RequestParam(required = false) storeId: UUID?,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
         @AuthenticationPrincipal principal: AdminPrincipal
-    ): ResponseEntity<List<AdminDto>> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
-        val admins = adminService.listAdminsByStore(storeId)
+    ): ResponseEntity<AdminPageResponse> {
+        val admins = if (storeId == null) {
+            requireSuperAdmin(principal)
+            adminService.listAllAdmins(page, size)
+        } else {
+            StoreAccessUtil.requireStoreAccess(principal, storeId)
+            adminService.listAdminsByStore(storeId, page, size)
+        }
         return ResponseEntity.ok(admins)
     }
 
