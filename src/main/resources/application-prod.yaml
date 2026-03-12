@@ -17,3 +17,15 @@ spring:
 jwt:
   public-key: ${JWT_PUBLIC_KEY}
   private-key: ${JWT_PRIVATE_KEY}
+
+rate-limit:
+  enabled: true
+  strict:
+    window-seconds: 60
+    max-requests: 20
+  auth:
+    window-seconds: 60
+    max-requests: 10
+  standard:
+    window-seconds: 60
+    max-requests: 60

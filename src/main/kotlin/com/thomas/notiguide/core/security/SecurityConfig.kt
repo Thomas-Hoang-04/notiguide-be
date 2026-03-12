@@ -1,6 +1,7 @@
 package com.thomas.notiguide.core.security
 
 import com.thomas.notiguide.core.jwt.JWTAuthFilter
+import com.thomas.notiguide.core.ratelimit.RateLimitFilter
 import com.thomas.notiguide.domain.admin.service.AdminAuthService
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -16,6 +17,7 @@ import org.springframework.security.web.server.SecurityWebFilterChain
 @EnableWebFluxSecurity
 class SecurityConfig(
     private val passwordEncoder: PasswordEncoder,
+    private val rateLimitFilter: RateLimitFilter,
     private val jwtAuthFilter: JWTAuthFilter,
     private val adminAuthService: AdminAuthService
 ) {
@@ -46,6 +48,7 @@ class SecurityConfig(
             ).permitAll()
             it.anyExchange().authenticated()
         }
+        .addFilterAt(rateLimitFilter, SecurityWebFiltersOrder.FIRST)
         .addFilterAt(jwtAuthFilter, SecurityWebFiltersOrder.AUTHENTICATION)
         .build()
 }
