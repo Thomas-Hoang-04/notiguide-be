@@ -3,6 +3,7 @@ package com.thomas.notiguide.domain.store.controller
 import com.thomas.notiguide.core.exception.ForbiddenException
 import com.thomas.notiguide.domain.admin.types.AdminRole
 import com.thomas.notiguide.domain.store.dto.StoreDto
+import com.thomas.notiguide.domain.store.dto.StorePageResponse
 import com.thomas.notiguide.domain.store.request.CreateStoreRequest
 import com.thomas.notiguide.domain.store.request.UpdateStoreRequest
 import com.thomas.notiguide.domain.store.service.StoreService
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
@@ -27,6 +29,17 @@ import java.util.UUID
 class StoreController(
     private val storeService: StoreService
 ) {
+
+    @GetMapping
+    suspend fun listStores(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<StorePageResponse> {
+        requireSuperAdmin(principal)
+        val response = storeService.listStores(page, size)
+        return ResponseEntity.ok(response)
+    }
 
     @GetMapping("/{id}")
     suspend fun getStore(

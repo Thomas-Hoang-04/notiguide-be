@@ -2,24 +2,49 @@ package com.thomas.notiguide.domain.store.service
 
 import com.thomas.notiguide.core.exception.ConflictException
 import com.thomas.notiguide.core.exception.NotFoundException
+import com.thomas.notiguide.domain.admin.repository.AdminRepository
 import com.thomas.notiguide.domain.queue.repository.RedisQueueRepository
 import com.thomas.notiguide.domain.queue.service.QueueService
 import com.thomas.notiguide.domain.store.dto.StoreDto
+import com.thomas.notiguide.domain.store.dto.StorePageResponse
 import com.thomas.notiguide.domain.store.entity.Store
 import com.thomas.notiguide.domain.store.repository.StoreRepository
 import com.thomas.notiguide.domain.store.request.CreateStoreRequest
 import com.thomas.notiguide.domain.store.request.UpdateStoreRequest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
+import kotlin.math.ceil
 
 @Service
 class StoreService(
     private val storeRepository: StoreRepository,
+    private val adminRepository: AdminRepository,
     private val redisQueueRepository: RedisQueueRepository,
     private val queueService: QueueService
 ) {
+
+    suspend fun listStores(page: Int, size: Int): StorePageResponse {
+        require(page >= 0) { "Page must be >= 0" }
+        require(size in 1..100) { "Size must be between 1 and 100" }
+
+        val offset = page * size
+        val items = storeRepository.findAllPaged(size, offset)
+            .map { it.toDto() }
+            .toList()
+        val totalItems = storeRepository.count()
+        val totalPages = if (totalItems == 0L) 0 else ceil(totalItems.toDouble() / size).toInt()
+
+        return StorePageResponse(
+            items = items,
+            page = page,
+            size = size,
+            totalItems = totalItems,
+            totalPages = totalPages
+        )
+    }
 
     suspend fun getStore(id: UUID): StoreDto {
         val store = storeRepository.findById(id)
@@ -32,7 +57,7 @@ class StoreService(
         require(request.name.isNotBlank()) { "Store name must not be blank" }
         val store = Store(
             name = request.name,
-            address = request.address
+            address = request.address?.takeIf { it.isNotBlank() }
         )
         return storeRepository.save(store).toDto()
     }
@@ -42,9 +67,13 @@ class StoreService(
         val store = storeRepository.findById(id)
             ?: throw NotFoundException("Store", "id", id.toString())
 
+        request.name?.let {
+            require(it.isNotBlank()) { "Store name must not be blank" }
+        }
+
         val updated = store.copy(
             name = request.name ?: store.name,
-            address = request.address ?: store.address,
+            address = if (request.addressProvided) request.address?.takeIf { it.isNotBlank() } else store.address,
             isActive = request.isActive ?: store.isActive
         )
         return storeRepository.save(updated).toDto()
@@ -54,6 +83,9 @@ class StoreService(
     suspend fun deleteStore(id: UUID) {
         val store = storeRepository.findById(id)
             ?: throw NotFoundException("Store", "id", id.toString())
+
+        if (adminRepository.countByStoreId(id) > 0)
+            throw ConflictException("Store has assigned admins. Remove or reassign admins before deleting the store.")
 
         val queueSize = redisQueueRepository.getQueueSize(id)
         val servingTickets = redisQueueRepository.getServingTickets(id).toList()
