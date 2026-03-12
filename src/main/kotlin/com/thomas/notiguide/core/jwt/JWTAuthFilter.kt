@@ -2,6 +2,7 @@ package com.thomas.notiguide.core.jwt
 
 import com.auth0.jwt.exceptions.JWTVerificationException
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.thomas.notiguide.core.exception.HttpException
 import com.thomas.notiguide.core.exception.model.ErrorResponse
 import com.thomas.notiguide.shared.principal.AdminPrincipalAuthToken
 import kotlinx.coroutines.reactor.ReactorContext
@@ -38,7 +39,6 @@ class JWTAuthFilter(
         try {
             val decodedJwt = jwtManager.verify(token)
             val principal = jwtToPrincipal.convert(decodedJwt)
-                ?: throw BadCredentialsException("Invalid JWT token")
             val authToken = AdminPrincipalAuthToken(principal)
             val context = ReactiveSecurityContextHolder.withAuthentication(authToken)
 
@@ -47,22 +47,30 @@ class JWTAuthFilter(
             }
         } catch (ex: JWTVerificationException) {
             log.warn("JWT verification failed: {} [{}]", ex.message, exchange.request.path)
-            writeErrorResponse(exchange, ex.message ?: "JWT verification failed")
+            writeErrorResponse(exchange, HttpStatus.UNAUTHORIZED, "Unauthorized", ex.message ?: "JWT verification failed")
         } catch (ex: BadCredentialsException) {
             log.warn("Bad credentials: {} [{}]", ex.message, exchange.request.path)
-            writeErrorResponse(exchange, ex.message ?: "Bad credentials")
+            writeErrorResponse(exchange, HttpStatus.UNAUTHORIZED, "Unauthorized", ex.message ?: "Bad credentials")
+        } catch (ex: HttpException) {
+            log.warn("HTTP exception in JWT filter: {} [{}]", ex.message, exchange.request.path)
+            writeErrorResponse(exchange, ex.status, ex.status.reasonPhrase, ex.message)
         }
     }
 
-    private suspend fun writeErrorResponse(exchange: ServerWebExchange, message: String) {
+    private suspend fun writeErrorResponse(
+        exchange: ServerWebExchange,
+        status: HttpStatus,
+        error: String,
+        message: String
+    ) {
         val response = exchange.response
-        response.statusCode = HttpStatus.UNAUTHORIZED
+        response.statusCode = status
         response.headers.contentType = MediaType.APPLICATION_JSON
 
         val body = ErrorResponse(
             timestamp = LocalDateTime.now(),
-            code = HttpStatus.UNAUTHORIZED.value(),
-            error = "Unauthorized",
+            code = status.value(),
+            error = error,
             message = message,
             path = exchange.request.path.toString(),
             method = exchange.request.method.name()

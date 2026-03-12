@@ -1,5 +1,6 @@
 package com.thomas.notiguide.core.database
 
+import com.thomas.notiguide.core.config.AppProperties
 import com.thomas.notiguide.shared.principal.AdminPrincipal
 import io.r2dbc.pool.ConnectionPool
 import io.r2dbc.pool.ConnectionPoolConfiguration
@@ -37,10 +38,9 @@ import java.util.UUID
 )
 class R2DBCConfig(
     private val r2Props: R2dbcProperties,
+    appProperties: AppProperties
 ): AbstractR2dbcConfiguration() {
-    companion object {
-        val VIETNAM_ZONE: ZoneId = ZoneId.of("Asia/Ho_Chi_Minh")
-    }
+    private val appZone: ZoneId = ZoneId.of(appProperties.timezone)
 
     @Bean
     fun reactiveAuditorAware(): ReactiveAuditorAware<UUID> = ReactiveAuditorAware {
@@ -54,7 +54,7 @@ class R2DBCConfig(
 
     @Bean
     fun auditingDateTimeProvider(): DateTimeProvider = DateTimeProvider {
-        Optional.of(OffsetDateTime.now(VIETNAM_ZONE) as TemporalAccessor)
+        Optional.of(OffsetDateTime.now(appZone) as TemporalAccessor)
     }
 
     @Bean

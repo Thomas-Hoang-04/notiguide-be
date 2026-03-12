@@ -8,5 +8,6 @@ data class ErrorResponse(
     val error: String,
     val message: String,
     val path: String,
-    val method: String
+    val method: String,
+    val details: Map<String, String>? = null
 )

@@ -11,6 +11,7 @@ import org.springframework.security.authentication.BadCredentialsException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.bind.support.WebExchangeBindException
 import java.time.LocalDateTime
 
 @RestControllerAdvice
@@ -25,7 +26,7 @@ class ExceptionHandler {
     ): ErrorResponse = ErrorResponse(
         timestamp = LocalDateTime.now(),
         code = status.value(),
-        error = ex.javaClass.simpleName,
+        error = status.reasonPhrase,
         message = ex.message ?: status.reasonPhrase,
         path = path,
         method = method
@@ -66,10 +67,39 @@ class ExceptionHandler {
         return generateTemplate(ex, HttpStatus.BAD_REQUEST, req.path.toString(), req.method.name())
     }
 
+    @ExceptionHandler(WebExchangeBindException::class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    fun handleValidation(ex: WebExchangeBindException, req: ServerHttpRequest): ErrorResponse {
+        val details = ex.bindingResult.fieldErrors
+            .groupBy { it.field }
+            .mapValues { (_, errors) ->
+                errors.firstNotNullOfOrNull { it.defaultMessage } ?: "Invalid value"
+            }
+
+        logger.warn("Validation failed: {} [${req.method} ${req.path}]", details)
+
+        return ErrorResponse(
+            timestamp = LocalDateTime.now(),
+            code = HttpStatus.BAD_REQUEST.value(),
+            error = HttpStatus.BAD_REQUEST.reasonPhrase,
+            message = "Validation failed",
+            path = req.path.toString(),
+            method = req.method.name(),
+            details = details
+        )
+    }
+
     @ExceptionHandler(Exception::class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     fun handleGeneric(ex: Exception, req: ServerHttpRequest): ErrorResponse {
         logger.error("Unhandled exception [${req.method} ${req.path}]", ex)
-        return generateTemplate(ex, HttpStatus.INTERNAL_SERVER_ERROR, req.path.toString(), req.method.name())
+        return ErrorResponse(
+            timestamp = LocalDateTime.now(),
+            code = HttpStatus.INTERNAL_SERVER_ERROR.value(),
+            error = "InternalServerError",
+            message = "An unexpected error occurred",
+            path = req.path.toString(),
+            method = req.method.name()
+        )
     }
 }

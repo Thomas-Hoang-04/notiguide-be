@@ -14,3 +14,9 @@ server:
 jwt:
   expiry-seconds: 86400
   private-key-password: ${JWT_PRIVATE_KEY_PASSWORD}
+
+app:
+  timezone: Asia/Ho_Chi_Minh
+  cors:
+    allowed-origins:
+      - http://localhost:3000
