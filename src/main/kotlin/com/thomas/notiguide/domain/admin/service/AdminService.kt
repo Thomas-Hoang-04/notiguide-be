@@ -38,6 +38,8 @@ class AdminService(
         require(request.username.isNotBlank()) { "Username must not be blank" }
         require(request.password.isNotBlank()) { "Password must not be blank" }
 
+        val normalizedUsername = request.username.lowercase()
+
         when (request.role) {
             AdminRole.ROLE_ADMIN -> {
                 if (request.storeId == null)
@@ -49,8 +51,8 @@ class AdminService(
             }
         }
 
-        if (adminRepository.existsByUsername(request.username))
-            throw ConflictException("Username '${request.username}' is already taken")
+        if (adminRepository.existsByUsername(normalizedUsername))
+            throw ConflictException("Username '$normalizedUsername' is already taken")
 
         if (request.storeId != null) {
             storeRepository.findById(request.storeId)
@@ -58,7 +60,7 @@ class AdminService(
         }
 
         val admin = Admin(
-            username = request.username,
+            username = normalizedUsername,
             passwordHash = passwordEncoder.encode(request.password),
             role = request.role,
             storeId = request.storeId,
