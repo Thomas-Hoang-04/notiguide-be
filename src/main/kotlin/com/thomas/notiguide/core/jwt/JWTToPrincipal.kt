@@ -1,6 +1,5 @@
 package com.thomas.notiguide.core.jwt
 
-import com.auth0.jwt.interfaces.Claim
 import com.auth0.jwt.interfaces.DecodedJWT
 import com.thomas.notiguide.core.exception.UnverifiedAdminException
 import com.thomas.notiguide.domain.admin.repository.AdminRepository
@@ -14,11 +13,6 @@ import java.util.UUID
 class JWTToPrincipal(
     private val adminRepository: AdminRepository
 ) {
-    private fun extractAuthClaim(jwt: DecodedJWT): List<SimpleGrantedAuthority> {
-        val claim: Claim = jwt.getClaim("auth")
-        if (claim.isNull || claim.isMissing) return emptyList()
-        return claim.asList(String::class.java).map { SimpleGrantedAuthority(it) }
-    }
 
     suspend fun convert(jwt: DecodedJWT): AdminPrincipal {
         val id = runCatching { UUID.fromString(jwt.subject) }
@@ -31,7 +25,7 @@ class JWTToPrincipal(
             _id = admin.id!!,
             _username = admin.username,
             _password = admin.passwordHash,
-            _authorities = extractAuthClaim(jwt),
+            _authorities = listOf(SimpleGrantedAuthority(admin.role.name)),
             storeId = admin.storeId,
             isVerified = true
         )

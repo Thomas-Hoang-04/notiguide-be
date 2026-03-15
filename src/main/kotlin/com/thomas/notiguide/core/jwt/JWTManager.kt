@@ -28,7 +28,7 @@ class JWTManager(
     suspend fun verify(token: String): DecodedJWT =
         withContext(Dispatchers.Default) {
             JWT.require(
-                Algorithm.RSA512(rsaKeys.publicKey, rsaKeys.privateKey)
+                Algorithm.RSA512(rsaKeys.publicKey, null)
             ).build().verify(token)
         }
 }

@@ -54,6 +54,9 @@ class JWTAuthFilter(
         } catch (ex: HttpException) {
             log.warn("HTTP exception in JWT filter: {} [{}]", ex.message, exchange.request.path)
             writeErrorResponse(exchange, ex.status, ex.status.reasonPhrase, ex.message)
+        } catch (ex: Exception) {
+            log.error("Unexpected error during authentication [{}]", exchange.request.path, ex)
+            writeErrorResponse(exchange, HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "An unexpected error occurred")
         }
     }
 
