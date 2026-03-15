@@ -8,7 +8,7 @@ import java.util.UUID
 
 @Repository
 class RedisTicketRepository(
-    private val redis: ReactiveRedisTemplate<String, Any>
+    private val redis: ReactiveRedisTemplate<String, String>
 ) {
 
     // TODO: Service layer must call getTicket() BEFORE this to read issued_at/called_at for wait_duration_seconds analytics

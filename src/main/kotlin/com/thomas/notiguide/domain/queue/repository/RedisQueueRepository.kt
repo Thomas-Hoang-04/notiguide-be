@@ -2,14 +2,13 @@ package com.thomas.notiguide.domain.queue.repository
 
 import com.thomas.notiguide.core.redis.RedisKeyManager
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import org.springframework.data.redis.core.*
 import org.springframework.stereotype.Repository
 import java.util.UUID
 
 @Repository
 class RedisQueueRepository(
-    private val redis: ReactiveRedisTemplate<String, Any>
+    private val redis: ReactiveRedisTemplate<String, String>
 ) {
 
     suspend fun removeFromQueue(storeId: UUID, ticketId: UUID): Long =
@@ -31,5 +30,4 @@ class RedisQueueRepository(
     fun getServingTickets(storeId: UUID): Flow<String> =
         redis.opsForSet()
             .membersAsFlow(RedisKeyManager.serving(storeId))
-            .map { it.toString() }
 }

@@ -7,8 +7,10 @@ import com.thomas.notiguide.domain.queue.service.QueueService
 import com.thomas.notiguide.domain.queue.types.CallNextResult
 import com.thomas.notiguide.shared.principal.AdminPrincipal
 import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import jakarta.validation.constraints.Size
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
+@Validated
 @RestController
 @RequestMapping("/api/queue/admin/{storeId}")
 class QueueAdminController(
@@ -47,7 +50,7 @@ class QueueAdminController(
     @PostMapping("/next")
     suspend fun callNext(
         @PathVariable storeId: UUID,
-        @RequestParam(required = false) counterId: String?,
+        @RequestParam(required = false) @Size(max = 100) counterId: String?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<NextTicketResponse> {
         StoreAccessUtil.requireStoreAccess(principal, storeId)

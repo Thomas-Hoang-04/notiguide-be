@@ -3,7 +3,7 @@ package com.thomas.notiguide.domain.queue.repository
 import com.thomas.notiguide.core.config.AppProperties
 import com.thomas.notiguide.core.redis.RedisKeyManager
 import kotlinx.coroutines.reactor.awaitSingle
-import org.springframework.data.redis.core.ReactiveStringRedisTemplate
+import org.springframework.data.redis.core.ReactiveRedisTemplate
 import org.springframework.data.redis.core.getAndAwait
 import org.springframework.data.redis.core.script.RedisScript
 import org.springframework.stereotype.Repository
@@ -13,7 +13,7 @@ import java.util.UUID
 
 @Repository
 class RedisCounterRepository(
-    private val redis: ReactiveStringRedisTemplate,
+    private val redis: ReactiveRedisTemplate<String, String>,
     appProperties: AppProperties
 ) {
 

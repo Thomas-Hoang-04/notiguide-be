@@ -30,7 +30,7 @@ class QueueService(
     private val redisQueueRepository: RedisQueueRepository,
     private val redisTicketRepository: RedisTicketRepository,
     private val redisCounterRepository: RedisCounterRepository,
-    private val redis: ReactiveRedisTemplate<String, Any>
+    private val redis: ReactiveRedisTemplate<String, String>
 ) {
     private val log = LoggerFactory.getLogger(this::class.java)
 
