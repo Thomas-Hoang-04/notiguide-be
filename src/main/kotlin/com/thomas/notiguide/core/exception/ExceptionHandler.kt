@@ -2,6 +2,7 @@ package com.thomas.notiguide.core.exception
 
 import com.auth0.jwt.exceptions.JWTVerificationException
 import com.thomas.notiguide.core.exception.model.ErrorResponse
+import jakarta.validation.ConstraintViolationException
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -34,7 +35,7 @@ class ExceptionHandler {
 
     @ExceptionHandler(HttpException::class)
     fun handleHttpException(ex: HttpException, req: ServerHttpRequest): ResponseEntity<ErrorResponse> {
-        logger.warn("HTTP exception: ${ex.message} [${req.method} ${req.path}]")
+        logger.warn("HTTP exception: {} [{} {}]", ex.message, req.method, req.path)
         val body = generateTemplate(ex, ex.status, req.path.toString(), req.method.name())
         return ResponseEntity.status(ex.status).body(body)
     }
@@ -42,28 +43,28 @@ class ExceptionHandler {
     @ExceptionHandler(BadCredentialsException::class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     fun handleBadCredentials(ex: BadCredentialsException, req: ServerHttpRequest): ErrorResponse {
-        logger.warn("Bad credentials: ${ex.message} [${req.method} ${req.path}]")
+        logger.warn("Bad credentials: {} [{} {}]", ex.message, req.method, req.path)
         return generateTemplate(ex, HttpStatus.UNAUTHORIZED, req.path.toString(), req.method.name())
     }
 
     @ExceptionHandler(JWTVerificationException::class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     fun handleJwtVerification(ex: JWTVerificationException, req: ServerHttpRequest): ErrorResponse {
-        logger.warn("JWT verification failed: ${ex.message} [${req.method} ${req.path}]")
+        logger.warn("JWT verification failed: {} [{} {}]", ex.message, req.method, req.path)
         return generateTemplate(ex, HttpStatus.UNAUTHORIZED, req.path.toString(), req.method.name())
     }
 
     @ExceptionHandler(AccessDeniedException::class)
     @ResponseStatus(HttpStatus.FORBIDDEN)
     fun handleAccessDenied(ex: AccessDeniedException, req: ServerHttpRequest): ErrorResponse {
-        logger.warn("Access denied: ${ex.message} [${req.method} ${req.path}]")
+        logger.warn("Access denied: {} [{} {}]", ex.message, req.method, req.path)
         return generateTemplate(ex, HttpStatus.FORBIDDEN, req.path.toString(), req.method.name())
     }
 
     @ExceptionHandler(IllegalArgumentException::class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     fun handleIllegalArgument(ex: IllegalArgumentException, req: ServerHttpRequest): ErrorResponse {
-        logger.warn("Illegal argument: ${ex.message} [${req.method} ${req.path}]")
+        logger.warn("Illegal argument: {} [{} {}]", ex.message, req.method, req.path)
         return generateTemplate(ex, HttpStatus.BAD_REQUEST, req.path.toString(), req.method.name())
     }
 
@@ -76,7 +77,26 @@ class ExceptionHandler {
                 errors.firstNotNullOfOrNull { it.defaultMessage } ?: "Invalid value"
             }
 
-        logger.warn("Validation failed: {} [${req.method} ${req.path}]", details)
+        logger.warn("Validation failed: {} [{} {}]", details, req.method, req.path)
+
+        return ErrorResponse(
+            timestamp = LocalDateTime.now(),
+            code = HttpStatus.BAD_REQUEST.value(),
+            error = HttpStatus.BAD_REQUEST.reasonPhrase,
+            message = "Validation failed",
+            path = req.path.toString(),
+            method = req.method.name(),
+            details = details
+        )
+    }
+
+    @ExceptionHandler(ConstraintViolationException::class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    fun handleConstraintViolation(ex: ConstraintViolationException, req: ServerHttpRequest): ErrorResponse {
+        val details = ex.constraintViolations
+            .associate { it.propertyPath.toString().substringAfterLast('.') to (it.message ?: "Invalid value") }
+
+        logger.warn("Constraint violation: {} [{} {}]", details, req.method, req.path)
 
         return ErrorResponse(
             timestamp = LocalDateTime.now(),
@@ -92,7 +112,7 @@ class ExceptionHandler {
     @ExceptionHandler(Exception::class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     fun handleGeneric(ex: Exception, req: ServerHttpRequest): ErrorResponse {
-        logger.error("Unhandled exception [${req.method} ${req.path}]", ex)
+        logger.error("Unhandled exception [{} {}]", req.method, req.path, ex)
         return ErrorResponse(
             timestamp = LocalDateTime.now(),
             code = HttpStatus.INTERNAL_SERVER_ERROR.value(),

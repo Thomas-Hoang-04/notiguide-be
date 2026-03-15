@@ -24,7 +24,7 @@ class AuthController(
 
     @PostMapping("/login")
     suspend fun login(@Valid @RequestBody request: LoginRequest): ResponseEntity<LoginResponse> {
-        val admin = adminRepository.findByUsername(request.username)
+        val admin = adminRepository.findByUsername(request.username.lowercase())
             ?: throw BadCredentialsException("Invalid username or password")
 
         if (!passwordEncoder.matches(request.password, admin.passwordHash))

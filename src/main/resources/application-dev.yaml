@@ -1,6 +1,6 @@
 spring:
   r2dbc:
-    url: ${SPRING_R2DBC_URL}${POSTGRES_DB}
+    url: "${SPRING_R2DBC_URL}${POSTGRES_DB}"
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
     pool:

@@ -38,7 +38,6 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis-reactive")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
-    developmentOnly("org.springframework.boot:spring-boot-docker-compose")
     runtimeOnly("org.postgresql:postgresql")
     implementation("org.postgresql:r2dbc-postgresql")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")

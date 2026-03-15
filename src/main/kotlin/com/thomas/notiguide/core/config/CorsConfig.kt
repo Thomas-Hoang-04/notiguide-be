@@ -16,6 +16,7 @@ class CorsConfig(
             allowedOrigins = appProperties.cors.allowedOrigins
             allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
             allowedHeaders = listOf("Authorization", "Content-Type")
+            exposedHeaders = listOf("X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset")
             allowCredentials = true
             maxAge = 3600
         }

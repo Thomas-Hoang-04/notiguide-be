@@ -35,9 +35,11 @@ class FirebaseConfig(private val env: Environment) {
             return null
         }
 
-        val options = FirebaseOptions.builder()
-            .setCredentials(GoogleCredentials.fromStream(serviceAcc))
-            .build()
+        val options = serviceAcc.use { stream ->
+            FirebaseOptions.builder()
+                .setCredentials(GoogleCredentials.fromStream(stream))
+                .build()
+        }
 
         log.info("Firebase initialized successfully")
         return FirebaseApp.initializeApp(options)

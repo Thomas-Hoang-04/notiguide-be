@@ -18,6 +18,10 @@ jwt:
   public-key: ${JWT_PUBLIC_KEY}
   private-key: ${JWT_PRIVATE_KEY}
 
+app:
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}
+
 rate-limit:
   enabled: true
   strict:
