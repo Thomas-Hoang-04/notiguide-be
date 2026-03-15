@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.toList
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
-import kotlin.math.ceil
 
 @Service
 class StoreService(
@@ -30,12 +29,17 @@ class StoreService(
         require(page >= 0) { "Page must be >= 0" }
         require(size in 1..100) { "Size must be between 1 and 100" }
 
-        val offset = page * size
-        val items = storeRepository.findAllPaged(size, offset)
-            .map { it.toDto() }
-            .toList()
         val totalItems = storeRepository.count()
-        val totalPages = if (totalItems == 0L) 0 else ceil(totalItems.toDouble() / size).toInt()
+        val totalPages = if (totalItems == 0L) 0 else ((totalItems + size - 1) / size).toInt()
+        val offset = page.toLong() * size
+
+        val items = if (offset >= totalItems) {
+            emptyList()
+        } else {
+            storeRepository.findAllPaged(size.toLong(), offset)
+                .map { it.toDto() }
+                .toList()
+        }
 
         return StorePageResponse(
             items = items,

@@ -11,7 +11,7 @@ import java.util.UUID
 interface StoreRepository : CoroutineCrudRepository<Store, UUID> {
 
     @Query("SELECT * FROM store ORDER BY created_at DESC LIMIT :size OFFSET :offset")
-    fun findAllPaged(size: Int, offset: Int): Flow<Store>
+    fun findAllPaged(size: Long, offset: Long): Flow<Store>
 
     @Query("SELECT * FROM store WHERE is_active = true ORDER BY created_at DESC")
     fun findAllActive(): Flow<Store>
