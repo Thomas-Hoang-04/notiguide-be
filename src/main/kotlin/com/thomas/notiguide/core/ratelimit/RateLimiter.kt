@@ -14,7 +14,7 @@ import java.util.UUID
 
 @Component
 class RateLimiter(
-    private val redis: ReactiveRedisTemplate<String, Any>
+    private val redis: ReactiveRedisTemplate<String, String>
 ) {
     private val log = LoggerFactory.getLogger(this::class.java)
 
@@ -116,9 +116,3 @@ class RateLimiter(
             resetAtEpochSeconds = 0
         )
 }
-
-data class RateLimitResult(
-    val allowed: Boolean,
-    val remaining: Long,
-    val resetAtEpochSeconds: Long
-)
