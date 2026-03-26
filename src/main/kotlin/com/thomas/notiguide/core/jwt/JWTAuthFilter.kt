@@ -2,8 +2,10 @@ package com.thomas.notiguide.core.jwt
 
 import com.auth0.jwt.exceptions.JWTVerificationException
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.thomas.notiguide.core.config.AppProperties
 import com.thomas.notiguide.core.exception.HttpException
 import com.thomas.notiguide.core.exception.model.ErrorResponse
+import com.thomas.notiguide.domain.admin.service.SessionService
 import com.thomas.notiguide.shared.principal.AdminPrincipalAuthToken
 import kotlinx.coroutines.reactor.ReactorContext
 import kotlinx.coroutines.reactor.awaitSingleOrNull
@@ -23,21 +25,38 @@ import java.time.LocalDateTime
 
 @Component
 class JWTAuthFilter(
+    private val appProperties: AppProperties,
     private val jwtManager: JWTManager,
     private val jwtToPrincipal: JWTToPrincipal,
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
+    private val sessionService: SessionService
 ) : CoWebFilter() {
 
     private val log = LoggerFactory.getLogger(this::class.java)
+
+    private val skipPaths = setOf("/api/auth/login", "/api/auth/logout", "/api/auth/refresh")
 
     override suspend fun filter(
         exchange: ServerWebExchange,
         chain: CoWebFilterChain
     ) {
+        val path = exchange.request.path.value()
+        if (path in skipPaths) return chain.filter(exchange)
+
         val token = exchange.extractToken() ?: return chain.filter(exchange)
 
         try {
             val decodedJwt = jwtManager.verify(token)
+
+            val tokenHash = TokenHashUtil.sha256(token)
+            if (sessionService.isRevoked(tokenHash)) {
+                writeErrorResponse(exchange, HttpStatus.UNAUTHORIZED, "Unauthorized", "Session revoked")
+                return
+            }
+
+            exchange.attributes["tokenHash"] = tokenHash
+            sessionService.updateLastActive(tokenHash)
+
             val principal = jwtToPrincipal.convert(decodedJwt)
             val authToken = AdminPrincipalAuthToken(principal)
             val context = ReactiveSecurityContextHolder.withAuthentication(authToken)
@@ -85,8 +104,12 @@ class JWTAuthFilter(
 
     private fun ServerWebExchange.extractToken(): String? {
         val authHeader = this.request.headers.getFirst(HttpHeaders.AUTHORIZATION)
-        return if (authHeader != null && authHeader.startsWith("Bearer "))
-            authHeader.substring(7)
-        else null
+        if (authHeader != null && authHeader.startsWith("Bearer "))
+            return authHeader.substring(7)
+
+        return this.request.cookies
+            .getFirst(appProperties.cookie.name)
+            ?.value
+            ?.takeIf { it.isNotBlank() }
     }
 }

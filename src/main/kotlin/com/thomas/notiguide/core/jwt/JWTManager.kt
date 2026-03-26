@@ -20,7 +20,7 @@ class JWTManager(
         withContext(Dispatchers.Default) {
             JWT.create()
                 .withSubject(id.toString())
-                .withExpiresAt(Instant.now().plusSeconds(jwtProperties.expirySeconds))
+                .withExpiresAt(Instant.now().plusSeconds(jwtProperties.accessExpirySeconds))
                 .withClaim("auth", roles)
                 .sign(Algorithm.RSA512(rsaKeys.publicKey, rsaKeys.privateKey))
         }

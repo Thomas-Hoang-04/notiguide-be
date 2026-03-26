@@ -1,12 +1,22 @@
 package com.thomas.notiguide.domain.admin.controller
 
+import com.thomas.notiguide.core.config.AppProperties
+import com.thomas.notiguide.core.config.JWTProperties
 import com.thomas.notiguide.core.exception.UnverifiedAdminException
 import com.thomas.notiguide.core.jwt.JWTManager
+import com.thomas.notiguide.core.jwt.RefreshTokenService
+import com.thomas.notiguide.core.jwt.TokenHashUtil
 import com.thomas.notiguide.domain.admin.dto.LoginResponse
 import com.thomas.notiguide.domain.admin.repository.AdminRepository
 import com.thomas.notiguide.domain.admin.request.LoginRequest
+import com.thomas.notiguide.domain.admin.service.AdminService
+import com.thomas.notiguide.domain.admin.service.SessionService
+import com.thomas.notiguide.domain.store.repository.StoreRepository
 import jakarta.validation.Valid
+import org.springframework.http.HttpHeaders
+import org.springframework.http.ResponseCookie
 import org.springframework.http.ResponseEntity
+import org.springframework.http.server.reactive.ServerHttpRequest
 import org.springframework.security.authentication.BadCredentialsException
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.web.bind.annotation.PostMapping
@@ -19,21 +29,144 @@ import org.springframework.web.bind.annotation.RestController
 class AuthController(
     private val adminRepository: AdminRepository,
     private val passwordEncoder: PasswordEncoder,
-    private val jwtManager: JWTManager
+    private val jwtManager: JWTManager,
+    private val refreshTokenService: RefreshTokenService,
+    private val storeRepository: StoreRepository,
+    private val jwtProperties: JWTProperties,
+    private val appProperties: AppProperties,
+    private val adminService: AdminService,
+    private val sessionService: SessionService
 ) {
 
     @PostMapping("/login")
-    suspend fun login(@Valid @RequestBody request: LoginRequest): ResponseEntity<LoginResponse> {
+    suspend fun login(
+        @Valid @RequestBody request: LoginRequest,
+        serverRequest: ServerHttpRequest
+    ): ResponseEntity<LoginResponse> {
+        val ip = extractClientIp(serverRequest)
         val admin = adminRepository.findByUsername(request.username.lowercase())
             ?: throw BadCredentialsException("Invalid username or password")
 
-        if (!passwordEncoder.matches(request.password, admin.passwordHash))
+        if (!passwordEncoder.matches(request.password, admin.passwordHash)) {
+            adminService.recordLoginAttempt(admin.id!!, ip, success = false)
             throw BadCredentialsException("Invalid username or password")
+        }
+
+        if (!admin.isVerified) {
+            adminService.recordLoginAttempt(admin.id!!, ip, success = false)
+            throw UnverifiedAdminException()
+        }
+
+        adminService.recordLoginAttempt(admin.id!!, ip, success = true)
+
+        val storeName = admin.storeId?.let { storeRepository.findById(it)?.name }
+        val accessToken = jwtManager.issue(admin.id, listOf(admin.role.name))
+        val refreshToken = refreshTokenService.issue(admin.id)
+
+        val tokenHash = TokenHashUtil.sha256(accessToken)
+        val userAgent = serverRequest.headers.getFirst("User-Agent")
+        val session = sessionService.createSession(admin.id, tokenHash, ip, userAgent)
+
+        return ResponseEntity.ok()
+            .header(HttpHeaders.SET_COOKIE, buildAccessCookie(accessToken).toString())
+            .header(HttpHeaders.SET_COOKIE, buildRefreshCookie(refreshToken).toString())
+            .body(LoginResponse(admin = admin.toDto(storeName), sessionId = session.id?.toString()))
+    }
+
+    @PostMapping("/refresh")
+    suspend fun refresh(request: ServerHttpRequest): ResponseEntity<Void> {
+        val refreshToken = extractRefreshToken(request)
+            ?: throw BadCredentialsException("Missing refresh token")
+
+        val (adminId, newRefreshToken) = refreshTokenService.rotate(refreshToken)
+            ?: throw BadCredentialsException("Invalid or expired refresh token")
+
+        val admin = adminRepository.findById(adminId)
+            ?: throw BadCredentialsException("Your account no longer exists")
 
         if (!admin.isVerified)
             throw UnverifiedAdminException()
 
-        val token = jwtManager.issue(admin.id!!, listOf(admin.role.name))
-        return ResponseEntity.ok(LoginResponse(token = token, admin = admin.toDto()))
+        // Clean up old session keyed by old access token
+        val oldAccessToken = extractAccessToken(request)
+        if (oldAccessToken != null) {
+            sessionService.deleteByTokenHash(TokenHashUtil.sha256(oldAccessToken))
+        }
+
+        val accessToken = jwtManager.issue(admin.id!!, listOf(admin.role.name))
+
+        // Create new session for the new access token
+        val tokenHash = TokenHashUtil.sha256(accessToken)
+        val ip = extractClientIp(request)
+        val userAgent = request.headers.getFirst("User-Agent")
+        sessionService.createSession(admin.id, tokenHash, ip, userAgent)
+
+        return ResponseEntity.noContent()
+            .header(HttpHeaders.SET_COOKIE, buildAccessCookie(accessToken).toString())
+            .header(HttpHeaders.SET_COOKIE, buildRefreshCookie(newRefreshToken).toString())
+            .build()
+    }
+
+    @PostMapping("/logout")
+    suspend fun logout(request: ServerHttpRequest): ResponseEntity<Void> {
+        extractRefreshToken(request)?.let { refreshTokenService.revoke(it) }
+
+        val accessToken = extractAccessToken(request)
+        if (accessToken != null) {
+            val tokenHash = TokenHashUtil.sha256(accessToken)
+            sessionService.deleteByTokenHash(tokenHash)
+        }
+
+        return ResponseEntity.noContent()
+            .header(HttpHeaders.SET_COOKIE, clearCookie(appProperties.cookie.name, appProperties.cookie.path).toString())
+            .header(HttpHeaders.SET_COOKIE, clearCookie(appProperties.cookie.refreshName, appProperties.cookie.refreshPath).toString())
+            .build()
+    }
+
+    private fun extractClientIp(request: ServerHttpRequest): String {
+        val forwarded = request.headers.getFirst("X-Forwarded-For")
+        if (!forwarded.isNullOrBlank()) {
+            return forwarded.split(",").first().trim()
+        }
+        return request.remoteAddress?.address?.hostAddress ?: "unknown"
+    }
+
+    private fun extractAccessToken(request: ServerHttpRequest): String? {
+        val authHeader = request.headers.getFirst(HttpHeaders.AUTHORIZATION)
+        if (authHeader != null && authHeader.startsWith("Bearer "))
+            return authHeader.substring(7)
+        return request.cookies.getFirst(appProperties.cookie.name)
+            ?.value
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    private fun extractRefreshToken(request: ServerHttpRequest): String? =
+        request.cookies.getFirst(appProperties.cookie.refreshName)
+            ?.value
+            ?.takeIf { it.isNotBlank() }
+
+    private fun buildAccessCookie(token: String): ResponseCookie =
+        buildCookie(appProperties.cookie.name, token, jwtProperties.accessExpirySeconds, appProperties.cookie.path)
+
+    private fun buildRefreshCookie(token: String): ResponseCookie =
+        buildCookie(appProperties.cookie.refreshName, token, jwtProperties.refreshExpirySeconds, appProperties.cookie.refreshPath)
+
+    private fun clearCookie(name: String, path: String): ResponseCookie =
+        buildCookie(name, "", 0, path)
+
+    private fun buildCookie(name: String, value: String, maxAge: Long, path: String): ResponseCookie {
+        val cookieProperties = appProperties.cookie
+        val builder = ResponseCookie.from(name, value)
+            .httpOnly(true)
+            .secure(cookieProperties.secure)
+            .sameSite(cookieProperties.sameSite)
+            .path(path)
+            .maxAge(maxAge)
+
+        cookieProperties.domain
+            ?.takeIf { it.isNotBlank() }
+            ?.let(builder::domain)
+
+        return builder.build()
     }
 }
