@@ -5,6 +5,8 @@ enum class TicketStatus {
     CALLED,
     SERVED,
     CANCELLED,
+    SKIPPED,
+    REQUEUED,
     UNKNOWN;
 
     companion object {

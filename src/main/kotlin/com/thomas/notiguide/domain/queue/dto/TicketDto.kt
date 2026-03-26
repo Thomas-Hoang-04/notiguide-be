@@ -21,7 +21,6 @@ data class IssueTicketResponse(
 data class TicketStatusResponse(
     val status: TicketStatus,
     val positionInQueue: Long?,
-    // TODO: populate from analytics domain when average service duration data is available
     val estimatedWaitTime: Long? = null
 )
 

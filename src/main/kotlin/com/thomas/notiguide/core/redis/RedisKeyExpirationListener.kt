@@ -1,6 +1,7 @@
 package com.thomas.notiguide.core.redis
 
 import com.thomas.notiguide.domain.queue.repository.RedisQueueRepository
+import com.thomas.notiguide.domain.queue.service.QueueService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,11 +18,13 @@ import org.springframework.data.redis.listener.PatternTopic
 import org.springframework.data.redis.listener.ReactiveRedisMessageListenerContainer
 import org.springframework.stereotype.Component
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration.Companion.milliseconds
 
 @Component
 class RedisKeyExpirationListener(
     private val connectionFactory: ReactiveRedisConnectionFactory,
-    private val queueRepo: RedisQueueRepository
+    private val queueRepo: RedisQueueRepository,
+    private val queueService: QueueService
 ) : DisposableBean {
 
     private val log = LoggerFactory.getLogger(this::class.java)
@@ -53,7 +56,7 @@ class RedisKeyExpirationListener(
                             "Failed to start Redis keyspace listener (attempt {}/{}), retrying in {}ms: {}",
                             attempt, MAX_RETRIES, delayMs, e.message
                         )
-                        delay(delayMs)
+                        delay(delayMs.milliseconds)
                     } else {
                         log.error(
                             "Failed to start Redis keyspace listener after {} attempts — " +
@@ -79,6 +82,18 @@ class RedisKeyExpirationListener(
                 .asFlow()
                 .collect { message ->
                     val expiredKey = message.message
+
+                    if (RedisKeyManager.isGraceExpiryKey(expiredKey)) {
+                        val (storeId, ticketId) = RedisKeyManager.parseGraceExpiryKey(expiredKey) ?: return@collect
+                        log.info("Grace period expired: store={} ticket={}", storeId, ticketId)
+                        try {
+                            queueService.handleNoShow(storeId, ticketId)
+                        } catch (e: Exception) {
+                            log.error("Failed to handle no-show: store={} ticket={}", storeId, ticketId, e)
+                        }
+                        return@collect
+                    }
+
                     if (!RedisKeyManager.isTicketKey(expiredKey)) return@collect
 
                     val (storeId, ticketId) = RedisKeyManager.parseTicketKey(expiredKey) ?: return@collect

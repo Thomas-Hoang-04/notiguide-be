@@ -2,7 +2,13 @@ package com.thomas.notiguide.domain.queue.repository
 
 import com.thomas.notiguide.core.redis.RedisKeyManager
 import kotlinx.coroutines.flow.Flow
-import org.springframework.data.redis.core.*
+import kotlinx.coroutines.reactor.awaitSingle
+import org.springframework.data.domain.Range
+import org.springframework.data.redis.core.ReactiveRedisTemplate
+import org.springframework.data.redis.core.membersAsFlow
+import org.springframework.data.redis.core.rankAndAwait
+import org.springframework.data.redis.core.removeAndAwait
+import org.springframework.data.redis.core.sizeAndAwait
 import org.springframework.stereotype.Repository
 import java.util.UUID
 
@@ -27,7 +33,17 @@ class RedisQueueRepository(
         redis.opsForSet()
             .removeAndAwait(RedisKeyManager.serving(storeId), ticketId.toString())
 
+    suspend fun getServingCount(storeId: UUID): Long =
+        redis.opsForSet()
+            .sizeAndAwait(RedisKeyManager.serving(storeId))
+
     fun getServingTickets(storeId: UUID): Flow<String> =
         redis.opsForSet()
             .membersAsFlow(RedisKeyManager.serving(storeId))
+
+    suspend fun getWaitingTicketIds(storeId: UUID): List<String> =
+        redis.opsForZSet()
+            .range(RedisKeyManager.queue(storeId), Range.unbounded())
+            .collectList()
+            .awaitSingle()
 }

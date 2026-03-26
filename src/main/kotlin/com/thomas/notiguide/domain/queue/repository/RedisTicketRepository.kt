@@ -11,11 +11,9 @@ class RedisTicketRepository(
     private val redis: ReactiveRedisTemplate<String, String>
 ) {
 
-    // TODO: Service layer must call getTicket() BEFORE this to read issued_at/called_at for wait_duration_seconds analytics
     suspend fun markServed(storeId: UUID, ticketId: UUID): Boolean =
         redis.delete(RedisKeyManager.ticket(storeId, ticketId)).awaitSingle() > 0
 
-    // TODO: Service layer must call getTicket() BEFORE this to read issued_at/called_at for wait_duration_seconds analytics
     suspend fun markCancelled(storeId: UUID, ticketId: UUID): Boolean =
         redis.delete(RedisKeyManager.ticket(storeId, ticketId)).awaitSingle() > 0
 
@@ -27,4 +25,7 @@ class RedisTicketRepository(
 
     suspend fun exists(storeId: UUID, ticketId: UUID): Boolean =
         redis.hasKey(RedisKeyManager.ticket(storeId, ticketId)).awaitSingle()
+
+    suspend fun markSkipped(storeId: UUID, ticketId: UUID): Boolean =
+        redis.delete(RedisKeyManager.ticket(storeId, ticketId)).awaitSingle() > 0
 }
