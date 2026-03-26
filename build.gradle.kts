@@ -50,9 +50,9 @@ dependencies {
 
     implementation("org.bouncycastle:bcpkix-jdk18on:1.83")
     implementation("com.auth0:java-jwt:4.5.1")
-    implementation("com.google.firebase:firebase-admin:9.8.0")
     implementation("me.paulschwarz:spring-dotenv:5.1.0")
     implementation("org.eclipse.paho:org.eclipse.paho.mqttv5.client:1.2.5")
+    implementation("com.google.firebase:firebase-admin:9.8.0")
 }
 
 kotlin {
