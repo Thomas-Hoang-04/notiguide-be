@@ -40,7 +40,7 @@ out/
 .kotlin
 
 .env
-**/firebase/**
+**/resources/firebase/**
 NOTES.txt
 docs/
 **/rsa/**
