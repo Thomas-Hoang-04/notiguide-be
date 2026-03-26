@@ -17,8 +17,8 @@ data class CreateAdminRequest(
     @field:NotBlank
     @field:Size(min = 8, max = 128)
     @field:Pattern(
-        regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).+$",
-        message = "Password must contain at least one uppercase letter, one lowercase letter, and one digit"
+        regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^a-zA-Z0-9\\s]).+$",
+        message = "Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character"
     )
     val password: String,
     val role: AdminRole,

@@ -53,11 +53,12 @@ data class Admin(
     val updatedAt: OffsetDateTime? = null
 ) {
 
-    fun toDto(): AdminDto = AdminDto(
+    fun toDto(storeName: String? = null): AdminDto = AdminDto(
         id = id!!,
         username = username,
         role = role,
         storeId = storeId,
+        storeName = storeName,
         isVerified = isVerified,
         createdBy = createdBy,
         verifiedBy = verifiedBy,

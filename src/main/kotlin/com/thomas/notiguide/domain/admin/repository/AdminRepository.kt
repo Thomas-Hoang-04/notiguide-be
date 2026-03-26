@@ -12,12 +12,19 @@ import java.util.UUID
 interface AdminRepository : CoroutineCrudRepository<Admin, UUID> {
     suspend fun findByUsername(username: String): Admin?
     suspend fun existsByUsername(username: String): Boolean
+    @Suppress("unused")
     fun findByStoreId(storeId: UUID): Flow<Admin>
     @Query("SELECT * FROM admin WHERE store_id = :storeId ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
     fun findByStoreIdPaged(storeId: UUID, limit: Long, offset: Long): Flow<Admin>
     @Query("SELECT * FROM admin ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
     fun findAllPaged(limit: Long, offset: Long): Flow<Admin>
+    @Query("SELECT * FROM admin WHERE role = :role ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
+    fun findByRolePaged(role: String, limit: Long, offset: Long): Flow<Admin>
     @Query("SELECT COUNT(*) FROM admin WHERE store_id = :storeId")
     suspend fun countByStoreId(storeId: UUID): Long
+    @Query("SELECT * FROM admin WHERE store_id = :storeId AND role = :role ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
+    fun findByStoreIdAndRolePaged(storeId: UUID, role: String, limit: Long, offset: Long): Flow<Admin>
+    @Query("SELECT COUNT(*) FROM admin WHERE store_id = :storeId AND role = :role")
+    suspend fun countByStoreIdAndRole(storeId: UUID, role: String): Long
     suspend fun countByRole(role: AdminRole): Long
 }

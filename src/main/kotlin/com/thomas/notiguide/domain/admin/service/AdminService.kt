@@ -4,15 +4,22 @@ import com.thomas.notiguide.core.exception.ConflictException
 import com.thomas.notiguide.core.exception.ForbiddenException
 import com.thomas.notiguide.core.exception.HttpException
 import com.thomas.notiguide.core.exception.NotFoundException
+import com.thomas.notiguide.core.jwt.RefreshTokenService
 import com.thomas.notiguide.domain.admin.dto.AdminDto
 import com.thomas.notiguide.domain.admin.dto.AdminPageResponse
+import com.thomas.notiguide.domain.admin.dto.LoginHistoryDto
+import com.thomas.notiguide.domain.admin.dto.LoginHistoryPageResponse
+import com.thomas.notiguide.domain.admin.entity.LoginHistory
+import com.thomas.notiguide.domain.admin.repository.LoginHistoryRepository
+import com.thomas.notiguide.domain.admin.repository.LoginHistoryQueryRepository
 import com.thomas.notiguide.domain.admin.entity.Admin
 import com.thomas.notiguide.domain.admin.types.AdminRole
 import com.thomas.notiguide.domain.admin.repository.AdminRepository
 import com.thomas.notiguide.domain.admin.request.CreateAdminRequest
+import com.thomas.notiguide.domain.admin.request.UpdatePasswordRequest
+import com.thomas.notiguide.domain.admin.request.UpdateUsernameRequest
 import com.thomas.notiguide.domain.store.repository.StoreRepository
 import kotlinx.coroutines.flow.toList
-import com.thomas.notiguide.domain.admin.request.UpdatePasswordRequest
 import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -24,13 +31,27 @@ import java.util.UUID
 class AdminService(
     private val adminRepository: AdminRepository,
     private val passwordEncoder: PasswordEncoder,
-    private val storeRepository: StoreRepository
+    private val storeRepository: StoreRepository,
+    private val refreshTokenService: RefreshTokenService,
+    private val loginHistoryRepository: LoginHistoryRepository,
+    private val loginHistoryQueryRepository: LoginHistoryQueryRepository
 ) {
 
+    @Transactional(readOnly = true)
     suspend fun getAdmin(id: UUID): AdminDto {
         val admin = adminRepository.findById(id)
             ?: throw NotFoundException("Admin", "id", id.toString())
-        return admin.toDto()
+        return admin.toDto(resolveStoreName(admin.storeId))
+    }
+
+    private suspend fun resolveStoreName(storeId: UUID?): String? {
+        return storeId?.let { storeRepository.findById(it)?.name }
+    }
+
+    private suspend fun resolveStoreNames(admins: List<Admin>): Map<UUID, String> {
+        val storeIds = admins.mapNotNull { it.storeId }.distinct()
+        if (storeIds.isEmpty()) return emptyMap()
+        return storeRepository.findAllById(storeIds).toList().associate { it.id!! to it.name }
     }
 
     @Transactional
@@ -40,24 +61,18 @@ class AdminService(
 
         val normalizedUsername = request.username.lowercase()
 
-        when (request.role) {
-            AdminRole.ROLE_ADMIN -> {
-                if (request.storeId == null)
-                    throw HttpException(HttpStatus.BAD_REQUEST, "ROLE_ADMIN requires a storeId")
-            }
-            AdminRole.ROLE_SUPER_ADMIN -> {
-                if (request.storeId != null)
-                    throw HttpException(HttpStatus.BAD_REQUEST, "ROLE_SUPER_ADMIN must not have a storeId")
-            }
+        if (request.role == AdminRole.ROLE_SUPER_ADMIN && request.storeId != null) {
+            throw HttpException(HttpStatus.BAD_REQUEST, "ROLE_SUPER_ADMIN must not have a storeId")
         }
 
         if (adminRepository.existsByUsername(normalizedUsername))
             throw ConflictException("Username '$normalizedUsername' is already taken")
 
-        if (request.storeId != null) {
-            storeRepository.findById(request.storeId)
+        val storeName = if (request.storeId != null) {
+            val store = storeRepository.findById(request.storeId)
                 ?: throw NotFoundException("Store", "id", request.storeId.toString())
-        }
+            store.name
+        } else null
 
         val admin = Admin(
             username = normalizedUsername,
@@ -67,7 +82,7 @@ class AdminService(
             isVerified = false,
             createdBy = createdById
         )
-        return adminRepository.save(admin).toDto()
+        return adminRepository.save(admin).toDto(storeName)
     }
 
     @Transactional
@@ -86,7 +101,7 @@ class AdminService(
             verifiedBy = verifierId,
             verifiedAt = OffsetDateTime.now()
         )
-        return adminRepository.save(verified).toDto()
+        return adminRepository.save(verified).toDto(resolveStoreName(verified.storeId))
     }
 
     @Transactional
@@ -102,7 +117,44 @@ class AdminService(
         val updated = admin.copy(
             passwordHash = passwordEncoder.encode(request.newPassword)
         )
-        return adminRepository.save(updated).toDto()
+        val saved = adminRepository.save(updated)
+        refreshTokenService.revokeAll(id)
+        return saved.toDto(resolveStoreName(saved.storeId))
+    }
+
+    @Transactional
+    suspend fun updateUsername(id: UUID, request: UpdateUsernameRequest): AdminDto {
+        val admin = adminRepository.findById(id)
+            ?: throw NotFoundException("Admin", "id", id.toString())
+
+        val normalizedUsername = request.username.lowercase()
+
+        if (normalizedUsername == admin.username)
+            throw HttpException(HttpStatus.BAD_REQUEST, "New username must differ from current username")
+
+        if (adminRepository.existsByUsername(normalizedUsername))
+            throw ConflictException("Username '$normalizedUsername' is already taken")
+
+        val updated = admin.copy(username = normalizedUsername)
+        return adminRepository.save(updated).toDto(resolveStoreName(updated.storeId))
+    }
+
+    @Transactional
+    suspend fun updateAdminStore(id: UUID, storeId: UUID?): AdminDto {
+        val admin = adminRepository.findById(id)
+            ?: throw NotFoundException("Admin", "id", id.toString())
+
+        if (admin.role == AdminRole.ROLE_SUPER_ADMIN)
+            throw HttpException(HttpStatus.BAD_REQUEST, "Cannot assign a store to a SUPER_ADMIN")
+
+        val storeName = if (storeId != null) {
+            val store = storeRepository.findById(storeId)
+                ?: throw NotFoundException("Store", "id", storeId.toString())
+            store.name
+        } else null
+
+        val updated = admin.copy(storeId = storeId)
+        return adminRepository.save(updated).toDto(storeName)
     }
 
     @Transactional
@@ -120,23 +172,32 @@ class AdminService(
         }
 
         adminRepository.delete(admin)
+        refreshTokenService.revokeAll(id)
     }
 
-    suspend fun listAdminsByStore(storeId: UUID, page: Int, size: Int): AdminPageResponse {
+    @Transactional(readOnly = true)
+    suspend fun listAdminsByStore(storeId: UUID, page: Int, size: Int, role: AdminRole? = null): AdminPageResponse {
         require(page >= 0) { "Page must be greater than or equal to 0" }
         require(size in 1..100) { "Size must be between 1 and 100" }
 
-        val totalItems = adminRepository.countByStoreId(storeId)
+        val totalItems = if (role != null) {
+            adminRepository.countByStoreIdAndRole(storeId, role.name)
+        } else {
+            adminRepository.countByStoreId(storeId)
+        }
         val totalPages = if (totalItems == 0L) 0 else ((totalItems + size - 1) / size).toInt()
         val offset = page.toLong() * size
 
         val items = if (offset >= totalItems) {
             emptyList()
         } else {
-            adminRepository
-                .findByStoreIdPaged(storeId, size.toLong(), offset)
-                .toList()
-                .map { it.toDto() }
+            val storeName = resolveStoreName(storeId)
+            val admins = if (role != null) {
+                adminRepository.findByStoreIdAndRolePaged(storeId, role.name, size.toLong(), offset)
+            } else {
+                adminRepository.findByStoreIdPaged(storeId, size.toLong(), offset)
+            }
+            admins.toList().map { it.toDto(storeName) }
         }
 
         return AdminPageResponse(
@@ -148,21 +209,30 @@ class AdminService(
         )
     }
 
-    suspend fun listAllAdmins(page: Int, size: Int): AdminPageResponse {
+    @Transactional(readOnly = true)
+    suspend fun listAllAdmins(page: Int, size: Int, role: AdminRole? = null): AdminPageResponse {
         require(page >= 0) { "Page must be greater than or equal to 0" }
         require(size in 1..100) { "Size must be between 1 and 100" }
 
-        val totalItems = adminRepository.count()
+        val totalItems = if (role != null) {
+            adminRepository.countByRole(role)
+        } else {
+            adminRepository.count()
+        }
         val totalPages = if (totalItems == 0L) 0 else ((totalItems + size - 1) / size).toInt()
         val offset = page.toLong() * size
 
         val items = if (offset >= totalItems) {
             emptyList()
         } else {
-            adminRepository
-                .findAllPaged(size.toLong(), offset)
-                .toList()
-                .map { it.toDto() }
+            val admins = if (role != null) {
+                adminRepository.findByRolePaged(role.name, size.toLong(), offset)
+            } else {
+                adminRepository.findAllPaged(size.toLong(), offset)
+            }
+            val adminList = admins.toList()
+            val storeNames = resolveStoreNames(adminList)
+            adminList.map { it.toDto(it.storeId?.let { id -> storeNames[id] }) }
         }
 
         return AdminPageResponse(
@@ -172,5 +242,25 @@ class AdminService(
             totalItems = totalItems,
             totalPages = totalPages
         )
+    }
+
+    suspend fun recordLoginAttempt(adminId: UUID, ipAddress: String, success: Boolean) {
+        loginHistoryRepository.save(
+            LoginHistory(adminId = adminId, ipAddress = ipAddress, success = success)
+        )
+    }
+
+    suspend fun getLoginHistory(adminId: UUID, limit: Int = 20): LoginHistoryPageResponse {
+        val rows = loginHistoryQueryRepository.findRecentByAdminId(adminId, limit)
+        val hasMore = rows.size > limit
+        val items = rows.take(limit).map {
+            LoginHistoryDto(
+                id = it.id.toString(),
+                ipAddress = it.ipAddress,
+                success = it.success,
+                createdAt = it.createdAt
+            )
+        }
+        return LoginHistoryPageResponse(items = items, hasMore = hasMore)
     }
 }
