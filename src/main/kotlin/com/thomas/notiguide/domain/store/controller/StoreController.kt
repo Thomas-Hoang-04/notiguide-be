@@ -4,8 +4,10 @@ import com.thomas.notiguide.core.exception.ForbiddenException
 import com.thomas.notiguide.domain.admin.types.AdminRole
 import com.thomas.notiguide.domain.store.dto.StoreDto
 import com.thomas.notiguide.domain.store.dto.StorePageResponse
+import com.thomas.notiguide.domain.store.dto.StoreSettingsDto
 import com.thomas.notiguide.domain.store.request.CreateStoreRequest
 import com.thomas.notiguide.domain.store.request.UpdateStoreRequest
+import com.thomas.notiguide.domain.store.request.UpdateStoreSettingsRequest
 import com.thomas.notiguide.domain.store.service.StoreService
 import com.thomas.notiguide.shared.principal.AdminPrincipal
 import com.thomas.notiguide.shared.principal.StoreAccessUtil
@@ -80,6 +82,25 @@ class StoreController(
         requireSuperAdmin(principal)
         storeService.deleteStore(id)
         return ResponseEntity.noContent().build()
+    }
+
+    @GetMapping("/{id}/settings")
+    suspend fun getStoreSettings(
+        @PathVariable id: UUID,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<StoreSettingsDto> {
+        StoreAccessUtil.requireStoreAccess(principal, id)
+        return ResponseEntity.ok(storeService.getStoreSettings(id))
+    }
+
+    @PutMapping("/{id}/settings")
+    suspend fun updateStoreSettings(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: UpdateStoreSettingsRequest,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<StoreSettingsDto> {
+        StoreAccessUtil.requireStoreAccess(principal, id)
+        return ResponseEntity.ok(storeService.updateStoreSettings(id, request))
     }
 
     private fun requireSuperAdmin(principal: AdminPrincipal) {

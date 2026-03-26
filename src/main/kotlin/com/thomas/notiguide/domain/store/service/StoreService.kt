@@ -2,17 +2,26 @@ package com.thomas.notiguide.domain.store.service
 
 import com.thomas.notiguide.core.exception.ConflictException
 import com.thomas.notiguide.core.exception.NotFoundException
+import com.thomas.notiguide.core.redis.RedisKeyManager
 import com.thomas.notiguide.domain.admin.repository.AdminRepository
 import com.thomas.notiguide.domain.queue.repository.RedisQueueRepository
 import com.thomas.notiguide.domain.queue.service.QueueService
 import com.thomas.notiguide.domain.store.dto.StoreDto
 import com.thomas.notiguide.domain.store.dto.StorePageResponse
+import com.thomas.notiguide.domain.store.dto.StoreSettingsDto
+import com.thomas.notiguide.domain.store.entity.ServiceType
 import com.thomas.notiguide.domain.store.entity.Store
+import com.thomas.notiguide.domain.store.entity.StoreSettings
+import com.thomas.notiguide.domain.store.repository.ServiceTypeRepository
 import com.thomas.notiguide.domain.store.repository.StoreRepository
+import com.thomas.notiguide.domain.store.repository.StoreSettingsRepository
 import com.thomas.notiguide.domain.store.request.CreateStoreRequest
 import com.thomas.notiguide.domain.store.request.UpdateStoreRequest
+import com.thomas.notiguide.domain.store.request.UpdateStoreSettingsRequest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.reactor.awaitSingleOrNull
+import org.springframework.data.redis.core.ReactiveRedisTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -22,9 +31,13 @@ class StoreService(
     private val storeRepository: StoreRepository,
     private val adminRepository: AdminRepository,
     private val redisQueueRepository: RedisQueueRepository,
-    private val queueService: QueueService
+    private val queueService: QueueService,
+    private val storeSettingsRepository: StoreSettingsRepository,
+    private val serviceTypeRepository: ServiceTypeRepository,
+    private val redis: ReactiveRedisTemplate<String, String>
 ) {
 
+    @Transactional(readOnly = true)
     suspend fun listStores(page: Int, size: Int): StorePageResponse {
         require(page >= 0) { "Page must be >= 0" }
         require(size in 1..100) { "Size must be between 1 and 100" }
@@ -50,6 +63,7 @@ class StoreService(
         )
     }
 
+    @Transactional(readOnly = true)
     suspend fun getStore(id: UUID): StoreDto {
         val store = storeRepository.findById(id)
             ?: throw NotFoundException("Store", "id", id.toString())
@@ -63,7 +77,10 @@ class StoreService(
             name = request.name,
             address = request.address?.takeIf { it.isNotBlank() }
         )
-        return storeRepository.save(store).toDto()
+        val saved = storeRepository.save(store)
+        storeSettingsRepository.save(StoreSettings(storeId = saved.id!!))
+        serviceTypeRepository.save(ServiceType(storeId = saved.id, name = "General", prefix = "A"))
+        return saved.toDto()
     }
 
     @Transactional
@@ -78,7 +95,8 @@ class StoreService(
         val updated = store.copy(
             name = request.name ?: store.name,
             address = if (request.addressProvided) request.address?.takeIf { it.isNotBlank() } else store.address,
-            isActive = request.isActive ?: store.isActive
+            isActive = request.isActive ?: store.isActive,
+            allowJumpCall = request.allowJumpCall ?: store.allowJumpCall
         )
         return storeRepository.save(updated).toDto()
     }
@@ -99,4 +117,46 @@ class StoreService(
         queueService.clearStoreData(id)
         storeRepository.delete(store)
     }
+
+    @Transactional(readOnly = true)
+    suspend fun getStoreSettings(storeId: UUID): StoreSettingsDto {
+        val settings = storeSettingsRepository.findById(storeId)
+            ?: throw NotFoundException("StoreSettings", "storeId", storeId.toString())
+        return settings.toDto()
+    }
+
+    @Transactional
+    suspend fun updateStoreSettings(storeId: UUID, request: UpdateStoreSettingsRequest): StoreSettingsDto {
+        val existing = storeSettingsRepository.findById(storeId)
+            ?: throw NotFoundException("StoreSettings", "storeId", storeId.toString())
+
+        if (request.noShowAction != null && request.noShowAction !in listOf("SKIP", "REQUEUE")) {
+            throw IllegalArgumentException("noShowAction must be SKIP or REQUEUE")
+        }
+
+        val updated = existing.copy(
+            maxQueueSize = request.maxQueueSize ?: existing.maxQueueSize,
+            gracePeriodSec = request.gracePeriodSec ?: existing.gracePeriodSec,
+            noShowAction = request.noShowAction ?: existing.noShowAction,
+            maxRequeues = request.maxRequeues ?: existing.maxRequeues,
+            requeueOffset = request.requeueOffset ?: existing.requeueOffset,
+            alertThreshold = request.alertThreshold ?: existing.alertThreshold
+        )
+        val saved = storeSettingsRepository.save(updated)
+
+        redis.delete(RedisKeyManager.storeSettings(storeId)).awaitSingleOrNull()
+
+        return saved.toDto()
+    }
+
+    private fun StoreSettings.toDto() = StoreSettingsDto(
+        storeId = storeId.toString(),
+        maxQueueSize = maxQueueSize,
+        gracePeriodSec = gracePeriodSec,
+        noShowAction = noShowAction,
+        maxRequeues = maxRequeues,
+        requeueOffset = requeueOffset,
+        alertThreshold = alertThreshold,
+        updatedAt = updatedAt
+    )
 }

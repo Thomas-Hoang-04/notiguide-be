@@ -24,6 +24,9 @@ data class Store(
     @Column("is_active")
     val isActive: Boolean = true,
 
+    @Column("allow_jump_call")
+    val allowJumpCall: Boolean = false,
+
     @CreatedDate
     @Column("created_at")
     val createdAt: OffsetDateTime? = null,
@@ -38,6 +41,7 @@ data class Store(
         name = name,
         address = address,
         isActive = isActive,
+        allowJumpCall = allowJumpCall,
         createdAt = createdAt,
         updatedAt = updatedAt
     )
