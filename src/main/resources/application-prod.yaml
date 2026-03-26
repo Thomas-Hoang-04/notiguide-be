@@ -21,6 +21,15 @@ jwt:
 app:
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}
+  cookie:
+    name: ${APP_COOKIE_NAME:auth_token}
+    secure: ${APP_COOKIE_SECURE:true}
+    same-site: ${APP_COOKIE_SAME_SITE:Strict}
+    domain: ${APP_COOKIE_DOMAIN:}
+    path: ${APP_COOKIE_PATH:/api}
+
+firebase:
+  credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
 
 rate-limit:
   enabled: true

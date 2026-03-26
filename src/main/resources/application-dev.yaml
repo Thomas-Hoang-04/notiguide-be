@@ -17,5 +17,8 @@ jwt:
   private-key: classpath:rsa/notiguide.pem
   public-key: classpath:rsa/notiguide-pub.pem
 
+firebase:
+  credentials-path: classpath:firebase/notiguide-firebase.json
+
 rate-limit:
   enabled: false
