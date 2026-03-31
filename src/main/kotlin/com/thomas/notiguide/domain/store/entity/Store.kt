@@ -15,6 +15,9 @@ data class Store(
     @Column("id")
     val id: UUID? = null,
 
+    @Column("public_id")
+    val publicId: String? = null,
+
     @Column("name")
     val name: String,
 
@@ -27,6 +30,9 @@ data class Store(
     @Column("allow_jump_call")
     val allowJumpCall: Boolean = false,
 
+    @Column("allow_no_show")
+    val allowNoShow: Boolean = false,
+
     @CreatedDate
     @Column("created_at")
     val createdAt: OffsetDateTime? = null,
@@ -38,10 +44,12 @@ data class Store(
 
     fun toDto(): StoreDto = StoreDto(
         id = id!!,
+        publicId = publicId!!,
         name = name,
         address = address,
         isActive = isActive,
         allowJumpCall = allowJumpCall,
+        allowNoShow = allowNoShow,
         createdAt = createdAt,
         updatedAt = updatedAt
     )

@@ -23,4 +23,6 @@ class UpdateStoreRequest {
     var isActive: Boolean? = null
 
     var allowJumpCall: Boolean? = null
+
+    var allowNoShow: Boolean? = null
 }

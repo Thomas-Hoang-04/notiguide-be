@@ -1,9 +1,7 @@
 package com.thomas.notiguide.domain.queue.dto
 
-import java.util.UUID
-
 data class StorePublicInfoResponse(
-    val id: UUID,
+    val publicId: String,
     val name: String,
     val address: String?,
     val isActive: Boolean,

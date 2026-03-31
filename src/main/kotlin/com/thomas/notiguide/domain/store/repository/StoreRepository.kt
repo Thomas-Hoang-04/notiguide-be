@@ -15,4 +15,7 @@ interface StoreRepository : CoroutineCrudRepository<Store, UUID> {
 
     @Query("SELECT * FROM store WHERE is_active = true ORDER BY created_at DESC")
     fun findAllActive(): Flow<Store>
+
+    @Query("SELECT * FROM store WHERE public_id = :publicId")
+    suspend fun findByPublicId(publicId: String): Store?
 }

@@ -70,15 +70,43 @@ class StoreService(
         return store.toDto()
     }
 
+    @Transactional(readOnly = true)
+    suspend fun getStoreByPublicId(publicId: String): StoreDto {
+        val normalizedId = publicId.trim()
+
+        val store = storeRepository.findByPublicId(normalizedId)
+            ?: runCatching { UUID.fromString(normalizedId) }
+                .getOrNull()
+                ?.let { storeRepository.findById(it) }
+            ?: throw NotFoundException("Store", "publicId", publicId)
+        return store.toDto()
+    }
+
     @Transactional
     suspend fun createStore(request: CreateStoreRequest): StoreDto {
         require(request.name.isNotBlank()) { "Store name must not be blank" }
+        validateNoShowAction(request.noShowAction)
+
         val store = Store(
             name = request.name,
-            address = request.address?.takeIf { it.isNotBlank() }
+            address = request.address?.takeIf { it.isNotBlank() },
+            allowJumpCall = request.allowJumpCall,
+            allowNoShow = request.allowNoShow
         )
         val saved = storeRepository.save(store)
-        storeSettingsRepository.save(StoreSettings(storeId = saved.id!!))
+
+        storeSettingsRepository.save(
+            StoreSettings(
+                storeId = saved.id!!,
+                maxQueueSize = request.maxQueueSize,
+                gracePeriodSec = request.gracePeriodSec,
+                noShowAction = request.noShowAction,
+                maxRequeues = request.maxRequeues,
+                requeueOffset = request.requeueOffset,
+                alertThreshold = request.alertThreshold
+            )
+        )
+
         serviceTypeRepository.save(ServiceType(storeId = saved.id, name = "General", prefix = "A"))
         return saved.toDto()
     }
@@ -96,7 +124,8 @@ class StoreService(
             name = request.name ?: store.name,
             address = if (request.addressProvided) request.address?.takeIf { it.isNotBlank() } else store.address,
             isActive = request.isActive ?: store.isActive,
-            allowJumpCall = request.allowJumpCall ?: store.allowJumpCall
+            allowJumpCall = request.allowJumpCall ?: store.allowJumpCall,
+            allowNoShow = request.allowNoShow ?: store.allowNoShow
         )
         return storeRepository.save(updated).toDto()
     }
@@ -130,9 +159,7 @@ class StoreService(
         val existing = storeSettingsRepository.findById(storeId)
             ?: throw NotFoundException("StoreSettings", "storeId", storeId.toString())
 
-        if (request.noShowAction != null && request.noShowAction !in listOf("SKIP", "REQUEUE")) {
-            throw IllegalArgumentException("noShowAction must be SKIP or REQUEUE")
-        }
+        request.noShowAction?.let(::validateNoShowAction)
 
         val updated = existing.copy(
             maxQueueSize = request.maxQueueSize ?: existing.maxQueueSize,
@@ -147,6 +174,12 @@ class StoreService(
         redis.delete(RedisKeyManager.storeSettings(storeId)).awaitSingleOrNull()
 
         return saved.toDto()
+    }
+
+    private fun validateNoShowAction(noShowAction: String) {
+        if (noShowAction !in listOf("SKIP", "REQUEUE")) {
+            throw IllegalArgumentException("noShowAction must be SKIP or REQUEUE")
+        }
     }
 
     private fun StoreSettings.toDto() = StoreSettingsDto(

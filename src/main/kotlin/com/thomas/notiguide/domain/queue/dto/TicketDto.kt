@@ -14,7 +14,7 @@ data class TicketDto(
 )
 
 data class IssueTicketResponse(
-    val storeId: UUID,
+    val storeId: String,
     val ticket: TicketDto
 )
 
