@@ -12,17 +12,64 @@ services:
       - ./src/main/resources/redis/redis.conf:/usr/local/etc/redis/redis.conf
       - notiguide-redis:/data
 
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli -a '${REDIS_PASSWORD}' ping | grep -q PONG || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - notiguide
+
+  backend:
+    image: ghcr.io/thomas-hoang-04/notiguide-be:latest
+    pull_policy: always
+    container_name: notiguide
+    restart: unless-stopped
+
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SPRING_R2DBC_URL: ${SPRING_R2DBC_URL}
+      SPRING_R2DBC_USERNAME: ${POSTGRES_USER}
+      SPRING_R2DBC_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      JWT_PUBLIC_KEY: /app/rsa/notiguide-pub.pem
+      JWT_PRIVATE_KEY: /app/rsa/notiguide.pem
+      JWT_PRIVATE_KEY_PASSWORD: ${JWT_PRIVATE_KEY_PASSWORD}
+      APP_COOKIE_NAME: ${APP_COOKIE_NAME}
+      APP_COOKIE_PATH: ${APP_COOKIE_PATH}
+      FIREBASE_CREDENTIALS_PATH: /app/config/firebase-spring.json
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID}
+      MQTT_USERNAME: ${MQTT_USERNAME}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+
+    volumes:
+      - ./firebase/firebase-spring.json:/app/config/firebase-spring.json:ro
+      - ./rsa:/app/rsa:ro
+
+    ports:
+      - "8080:8080"
+
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
     networks:
       - notiguide
 
 volumes:
-  notiguide:
-    name: notiguide
-
   notiguide-redis:
     name: notiguide-redis
 
 networks:
   notiguide:
     name: notiguide
-

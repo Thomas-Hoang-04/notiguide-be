@@ -1,6 +1,7 @@
 package com.thomas.notiguide.domain.queue.controller
 
 import com.thomas.notiguide.core.exception.NotFoundException
+import com.thomas.notiguide.core.exception.ServiceUnavailableException
 import com.thomas.notiguide.core.firebase.FcmNotificationService
 import com.thomas.notiguide.domain.queue.dto.IssueTicketResponse
 import com.thomas.notiguide.domain.queue.dto.QueueSizeResponse
@@ -102,9 +103,11 @@ class QueuePublicController(
         @PathVariable ticketId: UUID,
         @Valid @RequestBody request: RegisterFcmTokenRequest
     ) {
+        val notificationService = fcmNotificationService
+            ?: throw ServiceUnavailableException("Push notifications are unavailable")
         val store = storeService.getStoreByPublicId(publicId)
         // Verify ticket exists before registering token
         queueService.getTicketStatus(store.id, ticketId)
-        fcmNotificationService?.registerToken(store.id, ticketId, request.token)
+        notificationService.registerToken(store.id, ticketId, request.token)
     }
 }

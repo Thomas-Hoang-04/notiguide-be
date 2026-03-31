@@ -1,8 +1,8 @@
 spring:
   r2dbc:
     url: ${SPRING_R2DBC_URL}
-    username: ${POSTGRES_USER}
-    password: ${POSTGRES_PASSWORD}
+    username: ${SPRING_R2DBC_USERNAME}
+    password: ${SPRING_R2DBC_PASSWORD}
     pool:
       initial-size: 5
       max-size: 10
@@ -24,11 +24,11 @@ app:
       - https://xephang.online
       - https://admin.xephang.online
   cookie:
-    name: ${APP_COOKIE_NAME:auth_token}
-    secure: ${APP_COOKIE_SECURE:true}
-    same-site: ${APP_COOKIE_SAME_SITE:Strict}
-    domain: ${APP_COOKIE_DOMAIN:}
-    path: ${APP_COOKIE_PATH:/api}
+    name: ${APP_COOKIE_NAME}
+    secure: true
+    same-site: None
+    domain:
+    path: ${APP_COOKIE_PATH}
 
 firebase:
   credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
@@ -44,4 +44,3 @@ rate-limit:
   standard:
     window-seconds: 60
     max-requests: 60
-

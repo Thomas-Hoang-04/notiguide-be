@@ -5,7 +5,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.messaging.FirebaseMessaging
 import org.slf4j.LoggerFactory
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.io.ClassPathResource
@@ -13,11 +13,7 @@ import java.io.FileInputStream
 import java.io.InputStream
 
 @Configuration
-@ConditionalOnProperty(
-    prefix = "firebase",
-    name = ["credentials-path"],
-    matchIfMissing = false
-)
+@ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText('\${firebase.credentials-path:}')")
 class FirebaseConfig(private val props: FirebaseProperties) {
 
     private val log = LoggerFactory.getLogger(this::class.java)
@@ -46,7 +42,7 @@ class FirebaseConfig(private val props: FirebaseProperties) {
         FirebaseMessaging.getInstance(firebaseApp)
 
     private fun openCredentials(): InputStream {
-        val path = props.credentialsPath
+        val path = props.credentialsPath.trim()
         return if (path.startsWith("classpath:")) {
             ClassPathResource(path.removePrefix("classpath:")).inputStream
         } else {

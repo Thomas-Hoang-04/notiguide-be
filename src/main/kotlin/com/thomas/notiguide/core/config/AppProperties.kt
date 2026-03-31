@@ -19,7 +19,7 @@ data class AppProperties(
         val sameSite: String = "Strict",
         val domain: String? = null,
         val path: String = "/api",
-        val refreshPath: String = "/api/auth/refresh"
+        val refreshPath: String = "/api/auth"
     )
 }
 

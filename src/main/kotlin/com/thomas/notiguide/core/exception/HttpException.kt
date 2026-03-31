@@ -16,5 +16,8 @@ class ConflictException(message: String)
 class ForbiddenException(message: String)
     : HttpException(HttpStatus.FORBIDDEN, message)
 
+class ServiceUnavailableException(message: String)
+    : HttpException(HttpStatus.SERVICE_UNAVAILABLE, message)
+
 class UnverifiedAdminException
     : HttpException(HttpStatus.FORBIDDEN, "Admin account has not been verified by an elevated admin")
