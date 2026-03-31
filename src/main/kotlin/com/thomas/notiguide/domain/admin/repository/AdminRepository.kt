@@ -10,7 +10,9 @@ import java.util.UUID
 
 @Repository
 interface AdminRepository : CoroutineCrudRepository<Admin, UUID> {
+    @Query("SELECT * FROM admin WHERE LOWER(username) = LOWER(:username)")
     suspend fun findByUsername(username: String): Admin?
+    @Query("SELECT EXISTS(SELECT 1 FROM admin WHERE LOWER(username) = LOWER(:username))")
     suspend fun existsByUsername(username: String): Boolean
     @Suppress("unused")
     fun findByStoreId(storeId: UUID): Flow<Admin>
@@ -18,13 +20,13 @@ interface AdminRepository : CoroutineCrudRepository<Admin, UUID> {
     fun findByStoreIdPaged(storeId: UUID, limit: Long, offset: Long): Flow<Admin>
     @Query("SELECT * FROM admin ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
     fun findAllPaged(limit: Long, offset: Long): Flow<Admin>
-    @Query("SELECT * FROM admin WHERE role = :role ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
-    fun findByRolePaged(role: String, limit: Long, offset: Long): Flow<Admin>
+    @Query("SELECT * FROM admin WHERE role = CAST(:role AS admin_role) ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
+    fun findByRolePaged(role: AdminRole, limit: Long, offset: Long): Flow<Admin>
     @Query("SELECT COUNT(*) FROM admin WHERE store_id = :storeId")
     suspend fun countByStoreId(storeId: UUID): Long
-    @Query("SELECT * FROM admin WHERE store_id = :storeId AND role = :role ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
-    fun findByStoreIdAndRolePaged(storeId: UUID, role: String, limit: Long, offset: Long): Flow<Admin>
-    @Query("SELECT COUNT(*) FROM admin WHERE store_id = :storeId AND role = :role")
-    suspend fun countByStoreIdAndRole(storeId: UUID, role: String): Long
+    @Query("SELECT * FROM admin WHERE store_id = :storeId AND role = CAST(:role AS admin_role) ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
+    fun findByStoreIdAndRolePaged(storeId: UUID, role: AdminRole, limit: Long, offset: Long): Flow<Admin>
+    @Query("SELECT COUNT(*) FROM admin WHERE store_id = :storeId AND role = CAST(:role AS admin_role)")
+    suspend fun countByStoreIdAndRole(storeId: UUID, role: AdminRole): Long
     suspend fun countByRole(role: AdminRole): Long
 }

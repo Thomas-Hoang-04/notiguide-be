@@ -59,14 +59,14 @@ class AdminService(
         require(request.username.isNotBlank()) { "Username must not be blank" }
         require(request.password.isNotBlank()) { "Password must not be blank" }
 
-        val normalizedUsername = request.username.lowercase()
+        val username = request.username.trim()
 
         if (request.role == AdminRole.ROLE_SUPER_ADMIN && request.storeId != null) {
             throw HttpException(HttpStatus.BAD_REQUEST, "ROLE_SUPER_ADMIN must not have a storeId")
         }
 
-        if (adminRepository.existsByUsername(normalizedUsername))
-            throw ConflictException("Username '$normalizedUsername' is already taken")
+        if (adminRepository.existsByUsername(username))
+            throw ConflictException("Username '$username' is already taken")
 
         val storeName = if (request.storeId != null) {
             val store = storeRepository.findById(request.storeId)
@@ -75,7 +75,7 @@ class AdminService(
         } else null
 
         val admin = Admin(
-            username = normalizedUsername,
+            username = username,
             passwordHash = passwordEncoder.encode(request.password),
             role = request.role,
             storeId = request.storeId,
@@ -127,15 +127,15 @@ class AdminService(
         val admin = adminRepository.findById(id)
             ?: throw NotFoundException("Admin", "id", id.toString())
 
-        val normalizedUsername = request.username.lowercase()
+        val username = request.username.trim()
 
-        if (normalizedUsername == admin.username)
+        if (username == admin.username)
             throw HttpException(HttpStatus.BAD_REQUEST, "New username must differ from current username")
 
-        if (adminRepository.existsByUsername(normalizedUsername))
-            throw ConflictException("Username '$normalizedUsername' is already taken")
+        if (!username.equals(admin.username, ignoreCase = true) && adminRepository.existsByUsername(username))
+            throw ConflictException("Username '$username' is already taken")
 
-        val updated = admin.copy(username = normalizedUsername)
+        val updated = admin.copy(username = username)
         return adminRepository.save(updated).toDto(resolveStoreName(updated.storeId))
     }
 
@@ -181,7 +181,7 @@ class AdminService(
         require(size in 1..100) { "Size must be between 1 and 100" }
 
         val totalItems = if (role != null) {
-            adminRepository.countByStoreIdAndRole(storeId, role.name)
+            adminRepository.countByStoreIdAndRole(storeId, role)
         } else {
             adminRepository.countByStoreId(storeId)
         }
@@ -193,7 +193,7 @@ class AdminService(
         } else {
             val storeName = resolveStoreName(storeId)
             val admins = if (role != null) {
-                adminRepository.findByStoreIdAndRolePaged(storeId, role.name, size.toLong(), offset)
+                adminRepository.findByStoreIdAndRolePaged(storeId, role, size.toLong(), offset)
             } else {
                 adminRepository.findByStoreIdPaged(storeId, size.toLong(), offset)
             }
@@ -226,7 +226,7 @@ class AdminService(
             emptyList()
         } else {
             val admins = if (role != null) {
-                adminRepository.findByRolePaged(role.name, size.toLong(), offset)
+                adminRepository.findByRolePaged(role, size.toLong(), offset)
             } else {
                 adminRepository.findAllPaged(size.toLong(), offset)
             }

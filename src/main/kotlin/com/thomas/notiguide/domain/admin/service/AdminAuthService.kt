@@ -14,7 +14,7 @@ class AdminAuthService(
 ) : ReactiveUserDetailsService {
 
     override fun findByUsername(username: String): Mono<UserDetails> = mono {
-        val admin = adminRepository.findByUsername(username.lowercase())
+        val admin = adminRepository.findByUsername(username)
             ?: throw UsernameNotFoundException("Admin '$username' not found")
         admin.toPrincipal()
     }

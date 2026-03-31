@@ -44,7 +44,7 @@ class AuthController(
         serverRequest: ServerHttpRequest
     ): ResponseEntity<LoginResponse> {
         val ip = extractClientIp(serverRequest)
-        val admin = adminRepository.findByUsername(request.username.lowercase())
+        val admin = adminRepository.findByUsername(request.username.trim())
             ?: throw BadCredentialsException("Invalid username or password")
 
         if (!passwordEncoder.matches(request.password, admin.passwordHash)) {
@@ -126,10 +126,14 @@ class AuthController(
     private fun extractClientIp(request: ServerHttpRequest): String {
         val forwarded = request.headers.getFirst("X-Forwarded-For")
         if (!forwarded.isNullOrBlank()) {
-            return forwarded.split(",").first().trim()
+            return normalizeIp(forwarded.split(",").first().trim())
         }
-        return request.remoteAddress?.address?.hostAddress ?: "unknown"
+        val ip = request.remoteAddress?.address?.hostAddress ?: "unknown"
+        return normalizeIp(ip)
     }
+
+    private fun normalizeIp(ip: String): String =
+        if (ip == "0:0:0:0:0:0:0:1" || ip == "::1") "127.0.0.1" else ip
 
     private fun extractAccessToken(request: ServerHttpRequest): String? {
         val authHeader = request.headers.getFirst(HttpHeaders.AUTHORIZATION)
