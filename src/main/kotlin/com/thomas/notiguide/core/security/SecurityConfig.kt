@@ -5,6 +5,8 @@ import com.thomas.notiguide.core.ratelimit.RateLimitFilter
 import com.thomas.notiguide.domain.admin.service.AdminAuthService
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.security.authentication.ReactiveAuthenticationManager
 import org.springframework.security.authentication.UserDetailsRepositoryReactiveAuthenticationManager
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity
@@ -12,6 +14,8 @@ import org.springframework.security.config.web.server.SecurityWebFiltersOrder
 import org.springframework.security.config.web.server.ServerHttpSecurity
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.server.SecurityWebFilterChain
+import org.springframework.security.web.server.ServerAuthenticationEntryPoint
+import reactor.core.publisher.Mono
 
 @Configuration
 @EnableWebFluxSecurity
@@ -38,6 +42,9 @@ class SecurityConfig(
         .httpBasic { it.disable() }
         .formLogin { it.disable() }
         .logout { it.disable() }
+        .exceptionHandling {
+            it.authenticationEntryPoint(jsonAuthenticationEntryPoint())
+        }
         .authenticationManager(authenticationManager)
         .authorizeExchange {
             it.pathMatchers(
@@ -51,4 +58,12 @@ class SecurityConfig(
         .addFilterAt(rateLimitFilter, SecurityWebFiltersOrder.FIRST)
         .addFilterAt(jwtAuthFilter, SecurityWebFiltersOrder.AUTHENTICATION)
         .build()
+
+    private fun jsonAuthenticationEntryPoint() = ServerAuthenticationEntryPoint { exchange, _ ->
+        val response = exchange.response
+        response.statusCode = HttpStatus.UNAUTHORIZED
+        response.headers.contentType = MediaType.APPLICATION_JSON
+        val body = """{"status":401,"error":"Unauthorized"}"""
+        response.writeWith(Mono.just(response.bufferFactory().wrap(body.toByteArray())))
+    }
 }

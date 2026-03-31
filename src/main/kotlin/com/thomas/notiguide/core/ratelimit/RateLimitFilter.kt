@@ -62,15 +62,19 @@ class RateLimitFilter(
         val forwarded = exchange.request.headers.getFirst("X-Forwarded-For")
         if (!forwarded.isNullOrBlank()) {
             val firstIp = forwarded.split(",").firstOrNull()?.trim()
-            if (!firstIp.isNullOrBlank()) return firstIp
+            if (!firstIp.isNullOrBlank()) return normalizeIp(firstIp)
         }
 
         val remoteAddress = exchange.request.remoteAddress
-        return remoteAddress?.address?.hostAddress
+        val ip = remoteAddress?.address?.hostAddress
             ?.takeIf { it.isNotBlank() }
             ?: remoteAddress?.hostString?.takeIf { it.isNotBlank() }
             ?: "unknown"
+        return normalizeIp(ip)
     }
+
+    private fun normalizeIp(ip: String): String =
+        if (ip == "0:0:0:0:0:0:0:1" || ip == "::1") "127.0.0.1" else ip
 
     private fun applyRateLimitHeaders(
         headers: HttpHeaders,
