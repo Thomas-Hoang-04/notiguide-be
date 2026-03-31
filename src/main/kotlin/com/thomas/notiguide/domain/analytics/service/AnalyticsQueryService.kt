@@ -173,6 +173,24 @@ class AnalyticsQueryService(
         )
     }
 
+    suspend fun getOverviewThroughput(range: Range): DailyThroughputResponse {
+        val (from, to) = rangeToRange(range)
+        val rows = analyticsEventRepository.getOverviewDailyThroughput(from, to)
+
+        return DailyThroughputResponse(
+            range = range.name.lowercase(),
+            days = rows.map { r ->
+                DailyCount(
+                    date = r.date,
+                    issued = r.issued,
+                    completed = r.completed,
+                    cancelled = r.cancelled,
+                    skipped = r.skipped
+                )
+            }
+        )
+    }
+
     suspend fun getWaitDistribution(storeId: UUID, period: Period): WaitDistributionResponse {
         val (from, to) = periodToRange(period)
         val rows = analyticsEventRepository.getWaitDistribution(storeId, from, to)

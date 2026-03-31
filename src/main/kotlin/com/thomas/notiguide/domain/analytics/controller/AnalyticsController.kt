@@ -30,6 +30,36 @@ class AnalyticsController(
     private val analyticsQueryService: AnalyticsQueryService
 ) {
 
+    // -- Overview (super-admin, cross-store) — must be declared before /{storeId} routes --
+
+    @GetMapping("/overview/realtime")
+    suspend fun getOverviewRealtime(
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<OverviewRealtimeResponse> {
+        requireSuperAdmin(principal)
+        return ResponseEntity.ok(analyticsQueryService.getOverviewRealtime())
+    }
+
+    @GetMapping("/overview/throughput")
+    suspend fun getOverviewThroughput(
+        @RequestParam range: Range,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<DailyThroughputResponse> {
+        requireSuperAdmin(principal)
+        return ResponseEntity.ok(analyticsQueryService.getOverviewThroughput(range))
+    }
+
+    @GetMapping("/overview")
+    suspend fun getOverview(
+        @RequestParam period: Period,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<OverviewResponse> {
+        requireSuperAdmin(principal)
+        return ResponseEntity.ok(analyticsQueryService.getOverview(period))
+    }
+
+    // -- Store-specific (admin with store access) --
+
     @GetMapping("/{storeId}/realtime")
     suspend fun getRealtimeStats(
         @PathVariable storeId: UUID,
@@ -87,23 +117,6 @@ class AnalyticsController(
     ): ResponseEntity<HourlyHeatmapResponse> {
         StoreAccessUtil.requireStoreAccess(principal, storeId)
         return ResponseEntity.ok(analyticsQueryService.getHourlyHeatmap(storeId, range))
-    }
-
-    @GetMapping("/overview/realtime")
-    suspend fun getOverviewRealtime(
-        @AuthenticationPrincipal principal: AdminPrincipal
-    ): ResponseEntity<OverviewRealtimeResponse> {
-        requireSuperAdmin(principal)
-        return ResponseEntity.ok(analyticsQueryService.getOverviewRealtime())
-    }
-
-    @GetMapping("/overview")
-    suspend fun getOverview(
-        @RequestParam period: Period,
-        @AuthenticationPrincipal principal: AdminPrincipal
-    ): ResponseEntity<OverviewResponse> {
-        requireSuperAdmin(principal)
-        return ResponseEntity.ok(analyticsQueryService.getOverview(period))
     }
 
     private fun requireSuperAdmin(principal: AdminPrincipal) {

@@ -252,6 +252,37 @@ class AnalyticsEventRepository(private val client: DatabaseClient) {
             .toList()
     }
 
+    suspend fun getOverviewDailyThroughput(from: OffsetDateTime, to: OffsetDateTime): List<DailyCountRow> {
+        return client.sql(
+            """
+            SELECT
+                (time AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AS day,
+                COALESCE(SUM(CASE WHEN event_type = 'TICKET_ISSUED' THEN 1 ELSE 0 END), 0) AS issued,
+                COALESCE(SUM(CASE WHEN event_type = 'TICKET_COMPLETED' THEN 1 ELSE 0 END), 0) AS completed,
+                COALESCE(SUM(CASE WHEN event_type = 'TICKET_CANCELLED' THEN 1 ELSE 0 END), 0) AS cancelled,
+                COALESCE(SUM(CASE WHEN event_type = 'TICKET_SKIPPED' THEN 1 ELSE 0 END), 0) AS skipped
+            FROM analytics_event
+            WHERE time >= :from AND time < :to
+            GROUP BY day
+            ORDER BY day
+            """.trimIndent()
+        )
+            .bind("from", from)
+            .bind("to", to)
+            .map { row: Readable, _ ->
+                DailyCountRow(
+                    date = row.get("day", LocalDate::class.java)!!,
+                    issued = row.get("issued", Long::class.javaObjectType) ?: 0L,
+                    completed = row.get("completed", Long::class.javaObjectType) ?: 0L,
+                    cancelled = row.get("cancelled", Long::class.javaObjectType) ?: 0L,
+                    skipped = row.get("skipped", Long::class.javaObjectType) ?: 0L
+                )
+            }
+            .all()
+            .asFlow()
+            .toList()
+    }
+
     suspend fun getWaitDistribution(storeId: UUID, from: OffsetDateTime, to: OffsetDateTime): List<WaitBucketRow> {
         return client.sql(
             """
