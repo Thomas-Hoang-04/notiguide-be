@@ -16,7 +16,7 @@ jwt:
 
 mqtt:
   broker: ${MQTT_BROKER:}
-  client-id: ${MQTT_CLIENT_ID:notiguide-server}
+  client-id: ${MQTT_CLIENT_ID:notiguide}
   username: ${MQTT_USERNAME:}
   password: ${MQTT_PASSWORD:}
   topic-prefix: notiguide
@@ -28,12 +28,3 @@ mqtt:
 
 app:
   timezone: Asia/Ho_Chi_Minh
-  cors:
-    allowed-origins:
-      - http://localhost:3000
-  cookie:
-    name: auth_token
-    secure: false
-    same-site: Strict
-    domain:
-    path: /api

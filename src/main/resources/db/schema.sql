@@ -11,6 +11,7 @@ ALTER DATABASE notiguide SET timezone TO 'Asia/Ho_Chi_Minh';
 SELECT pg_reload_conf();
 
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TYPE admin_role AS ENUM ('ROLE_SUPER_ADMIN', 'ROLE_ADMIN');
 CREATE TYPE analytics_event_type AS ENUM (
@@ -22,19 +23,38 @@ CREATE TYPE analytics_event_type AS ENUM (
     'DEVICE_TRIGGERED'
 );
 
+CREATE OR REPLACE FUNCTION generate_store_public_id() RETURNS TEXT AS $$
+DECLARE
+    candidate TEXT;
+BEGIN
+    LOOP
+        -- 6 random bytes → 8 base64 chars; strip non-alphanumeric padding chars
+        candidate := regexp_replace(encode(gen_random_bytes(6), 'base64'), '[^A-Za-z0-9]', '', 'g');
+        -- base64 of 6 bytes is always 8 chars but may contain +/= — keep looping until clean 8 chars
+        IF length(candidate) = 8 THEN
+            RETURN candidate;
+        END IF;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TABLE store (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    public_id VARCHAR(8) NOT NULL UNIQUE DEFAULT generate_store_public_id(),
     name VARCHAR(255) NOT NULL,
     address TEXT,
     is_active BOOLEAN DEFAULT TRUE,
     allow_jump_call BOOLEAN DEFAULT FALSE,
+    allow_no_show BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX idx_store_public_id ON store(public_id);
+
 CREATE TABLE admin (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    username VARCHAR(100) UNIQUE NOT NULL,
+    username VARCHAR(100) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     role admin_role NOT NULL,
     store_id UUID REFERENCES store(id) ON DELETE RESTRICT,
@@ -50,6 +70,7 @@ CREATE TABLE admin (
     )
 );
 
+CREATE UNIQUE INDEX idx_admin_username_lower ON admin(LOWER(username));
 CREATE INDEX idx_admin_store ON admin(store_id);
 
 CREATE TABLE notifier_device (

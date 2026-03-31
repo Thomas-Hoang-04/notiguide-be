@@ -1,6 +1,6 @@
 spring:
   r2dbc:
-    url: ${SPRING_R2DBC_URL}${POSTGRES_DB}
+    url: ${SPRING_R2DBC_URL}
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
     pool:
@@ -20,7 +20,9 @@ jwt:
 
 app:
   cors:
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}
+    allowed-origins:
+      - https://xephang.online
+      - https://admin.xephang.online
   cookie:
     name: ${APP_COOKIE_NAME:auth_token}
     secure: ${APP_COOKIE_SECURE:true}
@@ -42,3 +44,4 @@ rate-limit:
   standard:
     window-seconds: 60
     max-requests: 60
+
