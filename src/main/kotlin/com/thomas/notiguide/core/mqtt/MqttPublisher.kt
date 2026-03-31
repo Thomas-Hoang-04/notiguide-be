@@ -4,12 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
-import org.springframework.stereotype.Component
 import java.util.UUID
 
-@Component
-@ConditionalOnBean(MqttClientManager::class)
 class MqttPublisher(
     private val clientManager: MqttClientManager,
     private val mqttProperties: MqttProperties,

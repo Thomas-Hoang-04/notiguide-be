@@ -4,10 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.thomas.notiguide.core.mqtt.MqttClientManager
 import com.thomas.notiguide.core.mqtt.MqttMessageHandler
 import com.thomas.notiguide.core.mqtt.MqttProperties
-import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
 import org.eclipse.paho.mqttv5.common.MqttMessage
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.ObjectProvider
+import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.stereotype.Component
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Sinks
@@ -25,9 +26,9 @@ data class QueueSseEvent(
 @Component
 class QueueEventBroadcaster(
     private val objectMapper: ObjectMapper,
-    private val mqttClientManager: MqttClientManager? = null,
-    private val mqttProperties: MqttProperties? = null
-) {
+    private val mqttClientManagerProvider: ObjectProvider<MqttClientManager>,
+    private val mqttPropertiesProvider: ObjectProvider<MqttProperties>
+) : SmartInitializingSingleton {
 
     private val log = LoggerFactory.getLogger(this::class.java)
 
@@ -38,11 +39,16 @@ class QueueEventBroadcaster(
         handleMqttMessage(topic, message)
     }
 
-    @PostConstruct
-    fun init() {
+    private var mqttClientManager: MqttClientManager? = null
+    private var mqttProperties: MqttProperties? = null
+
+    override fun afterSingletonsInstantiated() {
+        mqttClientManager = mqttClientManagerProvider.ifAvailable
+        mqttProperties = mqttPropertiesProvider.ifAvailable
+
         if (mqttClientManager != null && mqttProperties != null) {
-            mqttClientManager.registerHandler(mqttHandler)
-            mqttClientManager.subscribe("${mqttProperties.topicPrefix}/store/+/queue")
+            mqttClientManager!!.registerHandler(mqttHandler)
+            mqttClientManager!!.subscribe("${mqttProperties!!.topicPrefix}/store/+/queue")
             log.info("QueueEventBroadcaster subscribed to MQTT queue events")
         } else {
             log.info("QueueEventBroadcaster running in local-only mode (MQTT not configured)")
@@ -52,8 +58,8 @@ class QueueEventBroadcaster(
     @PreDestroy
     fun destroy() {
         if (mqttClientManager != null && mqttProperties != null) {
-            mqttClientManager.unsubscribe("${mqttProperties.topicPrefix}/store/+/queue")
-            mqttClientManager.removeHandler(mqttHandler)
+            mqttClientManager!!.unsubscribe("${mqttProperties!!.topicPrefix}/store/+/queue")
+            mqttClientManager!!.removeHandler(mqttHandler)
         }
     }
 

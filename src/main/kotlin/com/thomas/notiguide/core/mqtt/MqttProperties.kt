@@ -4,10 +4,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 
 @ConfigurationProperties(prefix = "mqtt")
 data class MqttProperties(
-    val broker: String = "",
-    val clientId: String = "notiguide-server",
-    val username: String? = null,
-    val password: String? = null,
+    val broker: String,
+    val clientId: String = "notiguide",
+    val username: String,
+    val password: String,
     val topicPrefix: String = "notiguide",
     val qos: Int = 1,
     val keepAliveSeconds: Int = 60,

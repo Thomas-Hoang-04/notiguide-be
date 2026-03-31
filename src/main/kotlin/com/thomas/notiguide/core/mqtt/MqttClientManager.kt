@@ -1,7 +1,5 @@
 package com.thomas.notiguide.core.mqtt
 
-import jakarta.annotation.PostConstruct
-import jakarta.annotation.PreDestroy
 import org.eclipse.paho.mqttv5.client.IMqttToken
 import org.eclipse.paho.mqttv5.client.MqttAsyncClient
 import org.eclipse.paho.mqttv5.client.MqttCallback
@@ -11,13 +9,9 @@ import org.eclipse.paho.mqttv5.common.MqttException
 import org.eclipse.paho.mqttv5.common.MqttMessage
 import org.eclipse.paho.mqttv5.common.packet.MqttProperties as PahoMqttProperties
 import org.slf4j.LoggerFactory
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
-import org.springframework.stereotype.Component
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
-@Component
-@ConditionalOnBean(MqttAsyncClient::class)
 class MqttClientManager(
     private val client: MqttAsyncClient,
     private val options: MqttConnectionOptions,
@@ -31,7 +25,6 @@ class MqttClientManager(
     val isConnected: Boolean
         get() = client.isConnected
 
-    @PostConstruct
     fun connect() {
         client.setCallback(this)
         try {
@@ -42,7 +35,6 @@ class MqttClientManager(
         }
     }
 
-    @PreDestroy
     fun disconnect() {
         try {
             if (client.isConnected) {

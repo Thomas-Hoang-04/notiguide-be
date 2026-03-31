@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 @RestController
-@RequestMapping("/api/queue/public/{storeId}")
+@RequestMapping("/api/queue/public/{publicId}")
 class QueuePublicController(
     private val queueService: QueueService,
     private val storeService: StoreService,
@@ -35,38 +35,41 @@ class QueuePublicController(
 
     @PostMapping("/tickets")
     suspend fun issueTicket(
-        @PathVariable storeId: UUID,
+        @PathVariable publicId: String,
         @RequestParam(required = false) serviceTypeId: UUID?
     ): ResponseEntity<IssueTicketResponse> {
-        val ticket = queueService.issueTicket(storeId, serviceTypeId)
+        val store = storeService.getStoreByPublicId(publicId)
+        val ticket = queueService.issueTicket(store.id, serviceTypeId)
         return ResponseEntity.status(HttpStatus.CREATED).body(
-            IssueTicketResponse(storeId = storeId, ticket = ticket)
+            IssueTicketResponse(storeId = store.publicId, ticket = ticket)
         )
     }
 
     @GetMapping("/service-types")
-    suspend fun listServiceTypes(@PathVariable storeId: UUID): ResponseEntity<List<ServiceTypePublicDto>> {
-        return ResponseEntity.ok(serviceTypeService.listActiveServiceTypes(storeId))
+    suspend fun listServiceTypes(@PathVariable publicId: String): ResponseEntity<List<ServiceTypePublicDto>> {
+        val store = storeService.getStoreByPublicId(publicId)
+        return ResponseEntity.ok(serviceTypeService.listActiveServiceTypes(store.id))
     }
 
     @GetMapping("/tickets/{ticketId}")
     suspend fun getTicketStatus(
-        @PathVariable storeId: UUID,
+        @PathVariable publicId: String,
         @PathVariable ticketId: UUID
     ): ResponseEntity<TicketStatusResponse> {
-        val status = queueService.getTicketStatus(storeId, ticketId)
+        val store = storeService.getStoreByPublicId(publicId)
+        val status = queueService.getTicketStatus(store.id, ticketId)
         return ResponseEntity.ok(status)
     }
 
     @GetMapping("/info")
-    suspend fun getStoreInfo(@PathVariable storeId: UUID): StorePublicInfoResponse {
-        val store = storeService.getStore(storeId)
+    suspend fun getStoreInfo(@PathVariable publicId: String): StorePublicInfoResponse {
+        val store = storeService.getStoreByPublicId(publicId)
         val queueState = queueService.getQueueState(store.id)
         val settings = try {
             storeService.getStoreSettings(store.id)
         } catch (_: NotFoundException) { null }
         return StorePublicInfoResponse(
-            id = store.id,
+            publicId = store.publicId,
             name = store.name,
             address = store.address,
             isActive = store.isActive,
@@ -76,29 +79,32 @@ class QueuePublicController(
     }
 
     @GetMapping("/size")
-    suspend fun getQueueSize(@PathVariable storeId: UUID): QueueSizeResponse {
-        val size = queueService.getQueueSize(storeId)
+    suspend fun getQueueSize(@PathVariable publicId: String): QueueSizeResponse {
+        val store = storeService.getStoreByPublicId(publicId)
+        val size = queueService.getQueueSize(store.id)
         return QueueSizeResponse(queueSize = size)
     }
 
     @PostMapping("/tickets/{ticketId}/cancel")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     suspend fun cancelTicket(
-        @PathVariable storeId: UUID,
+        @PathVariable publicId: String,
         @PathVariable ticketId: UUID
     ) {
-        queueService.cancelTicket(storeId, ticketId)
+        val store = storeService.getStoreByPublicId(publicId)
+        queueService.cancelTicket(store.id, ticketId)
     }
 
     @PostMapping("/tickets/{ticketId}/fcm-token")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     suspend fun registerFcmToken(
-        @PathVariable storeId: UUID,
+        @PathVariable publicId: String,
         @PathVariable ticketId: UUID,
         @Valid @RequestBody request: RegisterFcmTokenRequest
     ) {
+        val store = storeService.getStoreByPublicId(publicId)
         // Verify ticket exists before registering token
-        queueService.getTicketStatus(storeId, ticketId)
-        fcmNotificationService?.registerToken(storeId, ticketId, request.token)
+        queueService.getTicketStatus(store.id, ticketId)
+        fcmNotificationService?.registerToken(store.id, ticketId, request.token)
     }
 }
