@@ -5,8 +5,11 @@
 .idea
 .kotlin
 .env
-firebase
-rsa
+src/main/resources/firebase
+src/main/resources/rsa
+src/main/resources/db
+src/main/resources/redis/redis.conf
+src/main/resources/application-dev.yaml
 build
 *.md
 http-test

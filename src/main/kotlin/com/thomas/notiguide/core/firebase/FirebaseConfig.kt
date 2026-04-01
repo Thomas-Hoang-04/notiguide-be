@@ -8,13 +8,15 @@ import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.core.io.ClassPathResource
-import java.io.FileInputStream
+import org.springframework.core.io.ResourceLoader
 import java.io.InputStream
 
 @Configuration
 @ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText('\${firebase.credentials-path:}')")
-class FirebaseConfig(private val props: FirebaseProperties) {
+class FirebaseConfig(
+    private val props: FirebaseProperties,
+    private val resourceLoader: ResourceLoader
+) {
 
     private val log = LoggerFactory.getLogger(this::class.java)
 
@@ -43,10 +45,6 @@ class FirebaseConfig(private val props: FirebaseProperties) {
 
     private fun openCredentials(): InputStream {
         val path = props.credentialsPath.trim()
-        return if (path.startsWith("classpath:")) {
-            ClassPathResource(path.removePrefix("classpath:")).inputStream
-        } else {
-            FileInputStream(path)
-        }
+        return resourceLoader.getResource(path).inputStream
     }
 }

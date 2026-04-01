@@ -34,19 +34,19 @@ services:
       SPRING_R2DBC_USERNAME: ${POSTGRES_USER}
       SPRING_R2DBC_PASSWORD: ${POSTGRES_PASSWORD}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-      JWT_PUBLIC_KEY: /app/rsa/notiguide-pub.pem
-      JWT_PRIVATE_KEY: /app/rsa/notiguide.pem
+      JWT_PUBLIC_KEY: file:/app/rsa/notiguide-pub.pem
+      JWT_PRIVATE_KEY: file:/app/rsa/notiguide.pem
       JWT_PRIVATE_KEY_PASSWORD: ${JWT_PRIVATE_KEY_PASSWORD}
       APP_COOKIE_NAME: ${APP_COOKIE_NAME}
       APP_COOKIE_PATH: ${APP_COOKIE_PATH}
-      FIREBASE_CREDENTIALS_PATH: /app/config/firebase-spring.json
+      FIREBASE_CREDENTIALS_PATH: file:/app/config/notiguide-firebase.json
       MQTT_BROKER_URL: ${MQTT_BROKER_URL}
       MQTT_CLIENT_ID: ${MQTT_CLIENT_ID}
       MQTT_USERNAME: ${MQTT_USERNAME}
       MQTT_PASSWORD: ${MQTT_PASSWORD}
 
     volumes:
-      - ./firebase/firebase-spring.json:/app/config/firebase-spring.json:ro
+      - ./firebase/notiguide-firebase.json:/app/config/notiguide-firebase.json:ro
       - ./rsa:/app/rsa:ro
 
     ports:

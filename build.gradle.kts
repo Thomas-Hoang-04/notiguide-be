@@ -1,5 +1,7 @@
+import org.springframework.boot.gradle.tasks.bundling.BootJar
+
 plugins {
-    val kotlinVer = "2.3.0"
+    val kotlinVer = "2.3.20"
     kotlin("jvm") version kotlinVer
     kotlin("plugin.spring") version kotlinVer
     id("org.springframework.boot") version "3.5.11"
@@ -59,6 +61,10 @@ kotlin {
     compilerOptions {
         freeCompilerArgs.addAll("-Xjsr305=strict")
     }
+}
+
+tasks.named<BootJar>("bootJar") {
+    exclude("firebase/**", "rsa/**", "db/**", "redis/redis.conf", "application-dev.yaml")
 }
 
 tasks.withType<Test> {
