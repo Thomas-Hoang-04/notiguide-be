@@ -23,7 +23,7 @@ services:
       - notiguide
 
   backend:
-    image: ghcr.io/thomas-hoang-04/notiguide-be:latest
+    image: thomashoang04/notiguide:latest
     pull_policy: always
     container_name: notiguide
     restart: unless-stopped

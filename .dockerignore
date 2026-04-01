@@ -4,6 +4,9 @@
 .gradle
 .idea
 .kotlin
+.env
+firebase
+rsa
 build
 *.md
 http-test
