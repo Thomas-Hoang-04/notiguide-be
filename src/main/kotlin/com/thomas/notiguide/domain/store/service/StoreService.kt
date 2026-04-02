@@ -103,9 +103,8 @@ class StoreService(
                 noShowAction = request.noShowAction,
                 maxRequeues = request.maxRequeues,
                 requeueOffset = request.requeueOffset,
-                alertThreshold = request.alertThreshold,
-                isNewEntity = true
-            )
+                alertThreshold = request.alertThreshold
+            ).markNew()
         )
 
         serviceTypeRepository.save(ServiceType(storeId = saved.id, name = "General", prefix = "A"))
@@ -168,8 +167,7 @@ class StoreService(
             noShowAction = request.noShowAction ?: existing.noShowAction,
             maxRequeues = request.maxRequeues ?: existing.maxRequeues,
             requeueOffset = request.requeueOffset ?: existing.requeueOffset,
-            alertThreshold = request.alertThreshold ?: existing.alertThreshold,
-            isNewEntity = false
+            alertThreshold = request.alertThreshold ?: existing.alertThreshold
         )
         val saved = storeSettingsRepository.save(updated)
 

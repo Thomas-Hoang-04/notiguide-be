@@ -21,6 +21,7 @@ import com.thomas.notiguide.domain.queue.repository.RedisTicketRepository
 import com.thomas.notiguide.domain.queue.types.CallNextResult
 import com.thomas.notiguide.domain.queue.types.QueueState
 import com.thomas.notiguide.domain.queue.types.TicketStatus
+import com.thomas.notiguide.domain.store.entity.StoreSettings
 import com.thomas.notiguide.domain.store.repository.ServiceTypeRepository
 import com.thomas.notiguide.domain.store.repository.StoreRepository
 import com.thomas.notiguide.domain.store.repository.StoreSettingsRepository
@@ -660,6 +661,7 @@ class QueueService(
             .awaitSingle()
     }
 
+    @Suppress("unused")
     suspend fun getTicketDto(storeId: UUID, ticketId: UUID): TicketDto {
         val ticket = redisTicketRepository.getTicket(storeId, ticketId)
         if (ticket.isEmpty())
@@ -678,7 +680,7 @@ class QueueService(
     }
 
     suspend fun handleNoShow(storeId: UUID, ticketId: UUID) {
-        val settings = storeSettingsRepository.findById(storeId) ?: return
+        val settings = requireNoShowSettings(storeId)
         val ticketData = redisTicketRepository.getTicket(storeId, ticketId)
         if (ticketData.isEmpty()) return
 
@@ -796,16 +798,16 @@ class QueueService(
     }
 
     private suspend fun setGraceExpiryIfNeeded(storeId: UUID, ticketId: UUID) {
-        val settings = storeSettingsRepository.findById(storeId)
-        if (settings != null && settings.gracePeriodSec > 0) {
-            redis.opsForValue()
-                .set(
-                    RedisKeyManager.graceExpiry(storeId, ticketId),
-                    "1",
-                    Duration.ofSeconds(settings.gracePeriodSec.toLong())
-                )
-                .awaitSingle()
-        }
+        val settings = findApplicableNoShowSettings(storeId) ?: return
+        if (settings.gracePeriodSec <= 0) return
+
+        redis.opsForValue()
+            .set(
+                RedisKeyManager.graceExpiry(storeId, ticketId),
+                "1",
+                Duration.ofSeconds(settings.gracePeriodSec.toLong())
+            )
+            .awaitSingle()
     }
 
     private suspend fun sendProactiveAlerts(storeId: UUID) {
@@ -825,6 +827,24 @@ class QueueService(
                 storeId, waitingTicketId, ticketNumber, position, storeName
             )
         }
+    }
+
+    private suspend fun findApplicableNoShowSettings(storeId: UUID): StoreSettings? {
+        val store = storeRepository.findById(storeId) ?: return null
+        val settings = storeSettingsRepository.findById(storeId)
+        return resolveApplicableNoShowSettings(store, settings)
+    }
+
+    private suspend fun requireNoShowSettings(storeId: UUID): StoreSettings {
+        val store = storeRepository.findById(storeId)
+            ?: throw NotFoundException("Store", "id", storeId.toString())
+
+        if (!store.allowNoShow) {
+            throw ConflictException("No-show handling is disabled for this store.")
+        }
+
+        return storeSettingsRepository.findById(storeId)
+            ?: throw NotFoundException("StoreSettings", "storeId", storeId.toString())
     }
 
     private fun parseStoredTimestamp(rawValue: String?): Instant? {

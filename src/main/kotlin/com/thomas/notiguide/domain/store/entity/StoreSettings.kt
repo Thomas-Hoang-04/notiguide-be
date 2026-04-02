@@ -17,9 +17,16 @@ data class StoreSettings(
     val maxRequeues: Int = 1,
     val requeueOffset: Int = 3,
     val alertThreshold: Int = 2,
-    @LastModifiedDate val updatedAt: OffsetDateTime? = null,
-    @Transient val isNewEntity: Boolean = false
+    @LastModifiedDate val updatedAt: OffsetDateTime? = null
 ) : Persistable<UUID> {
+    @Transient
+    private var newEntity: Boolean = false
+
     override fun getId(): UUID = storeId
-    override fun isNew(): Boolean = isNewEntity
+
+    override fun isNew(): Boolean = newEntity
+
+    fun markNew(): StoreSettings = apply {
+        newEntity = true
+    }
 }
