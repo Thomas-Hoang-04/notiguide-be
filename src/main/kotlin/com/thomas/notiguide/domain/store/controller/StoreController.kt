@@ -69,7 +69,13 @@ class StoreController(
         @Valid @RequestBody request: UpdateStoreRequest,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<StoreDto> {
-        requireSuperAdmin(principal)
+        StoreAccessUtil.requireStoreAccess(principal, id)
+        if (!isSuperAdmin(principal)) {
+            // Regular ADMINs may only toggle queue behavior flags
+            if (request.name != null || request.addressProvided || request.isActive != null) {
+                throw ForbiddenException("Only elevated admins can modify store name, address, or status")
+            }
+        }
         val dto = storeService.updateStore(id, request)
         return ResponseEntity.ok(dto)
     }
@@ -103,8 +109,11 @@ class StoreController(
         return ResponseEntity.ok(storeService.updateStoreSettings(id, request))
     }
 
+    private fun isSuperAdmin(principal: AdminPrincipal): Boolean =
+        principal.authorities.any { it.authority == AdminRole.ROLE_SUPER_ADMIN.name }
+
     private fun requireSuperAdmin(principal: AdminPrincipal) {
-        if (principal.authorities.none { it.authority == AdminRole.ROLE_SUPER_ADMIN.name })
+        if (!isSuperAdmin(principal))
             throw ForbiddenException("Only elevated admins can perform this action")
     }
 }
