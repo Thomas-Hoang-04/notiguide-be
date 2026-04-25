@@ -12,6 +12,7 @@ import com.thomas.notiguide.domain.admin.request.LoginRequest
 import com.thomas.notiguide.domain.admin.service.AdminService
 import com.thomas.notiguide.domain.admin.service.SessionService
 import com.thomas.notiguide.domain.store.repository.StoreRepository
+import com.thomas.notiguide.shared.http.ClientIpResolver
 import jakarta.validation.Valid
 import org.springframework.http.HttpHeaders
 import org.springframework.http.ResponseCookie
@@ -123,17 +124,8 @@ class AuthController(
             .build()
     }
 
-    private fun extractClientIp(request: ServerHttpRequest): String {
-        val forwarded = request.headers.getFirst("X-Forwarded-For")
-        if (!forwarded.isNullOrBlank()) {
-            return normalizeIp(forwarded.split(",").first().trim())
-        }
-        val ip = request.remoteAddress?.address?.hostAddress ?: "unknown"
-        return normalizeIp(ip)
-    }
-
-    private fun normalizeIp(ip: String): String =
-        if (ip == "0:0:0:0:0:0:0:1" || ip == "::1") "127.0.0.1" else ip
+    private fun extractClientIp(request: ServerHttpRequest): String =
+        ClientIpResolver.resolve(request)
 
     private fun extractAccessToken(request: ServerHttpRequest): String? {
         val authHeader = request.headers.getFirst(HttpHeaders.AUTHORIZATION)

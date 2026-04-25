@@ -2,6 +2,7 @@ package com.thomas.notiguide.core.ratelimit
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.thomas.notiguide.core.exception.model.ErrorResponse
+import com.thomas.notiguide.shared.http.ClientIpResolver
 import kotlinx.coroutines.reactor.awaitSingleOrNull
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
@@ -33,7 +34,7 @@ class RateLimitFilter(
             return chain.filter(exchange)
 
         val tier = resolveTier(exchange.request.path.value()) ?: return chain.filter(exchange)
-        val clientIp = extractClientIp(exchange)
+        val clientIp = ClientIpResolver.resolve(exchange.request)
         val key = "ratelimit:${tier.key}:$clientIp"
         val result = rateLimiter.isAllowed(key, tier.config.windowSeconds, tier.config.maxRequests)
 
@@ -57,24 +58,6 @@ class RateLimitFilter(
             TierMatch(key = "standard", config = rateLimitProperties.standard)
         else -> null
     }
-
-    private fun extractClientIp(exchange: ServerWebExchange): String {
-        val forwarded = exchange.request.headers.getFirst("X-Forwarded-For")
-        if (!forwarded.isNullOrBlank()) {
-            val firstIp = forwarded.split(",").firstOrNull()?.trim()
-            if (!firstIp.isNullOrBlank()) return normalizeIp(firstIp)
-        }
-
-        val remoteAddress = exchange.request.remoteAddress
-        val ip = remoteAddress?.address?.hostAddress
-            ?.takeIf { it.isNotBlank() }
-            ?: remoteAddress?.hostString?.takeIf { it.isNotBlank() }
-            ?: "unknown"
-        return normalizeIp(ip)
-    }
-
-    private fun normalizeIp(ip: String): String =
-        if (ip == "0:0:0:0:0:0:0:1" || ip == "::1") "127.0.0.1" else ip
 
     private fun applyRateLimitHeaders(
         headers: HttpHeaders,

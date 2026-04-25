@@ -2,11 +2,13 @@ package com.thomas.notiguide.domain.admin.controller
 
 import com.thomas.notiguide.core.config.AppProperties
 import com.thomas.notiguide.core.exception.ForbiddenException
+import com.thomas.notiguide.core.jwt.RefreshTokenService
 import com.thomas.notiguide.core.jwt.TokenHashUtil
 import com.thomas.notiguide.domain.admin.dto.AdminDto
 import com.thomas.notiguide.domain.admin.dto.AdminPageResponse
 import com.thomas.notiguide.domain.admin.dto.AdminSessionDto
 import com.thomas.notiguide.domain.admin.dto.LoginHistoryPageResponse
+import com.thomas.notiguide.domain.admin.dto.RevokeAllResponse
 import com.thomas.notiguide.domain.admin.types.AdminRole
 import com.thomas.notiguide.domain.admin.request.CreateAdminRequest
 import com.thomas.notiguide.domain.admin.request.UpdateAdminStoreRequest
@@ -19,6 +21,7 @@ import com.thomas.notiguide.shared.principal.StoreAccessUtil
 import jakarta.validation.Valid
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseCookie
 import org.springframework.http.ResponseEntity
 import org.springframework.http.server.reactive.ServerHttpRequest
 import org.springframework.security.core.annotation.AuthenticationPrincipal
@@ -38,6 +41,7 @@ import java.util.UUID
 class AdminController(
     private val adminService: AdminService,
     private val sessionService: SessionService,
+    private val refreshTokenService: RefreshTokenService,
     private val appProperties: AppProperties
 ) {
 
@@ -148,6 +152,34 @@ class AdminController(
         return ResponseEntity.noContent().build()
     }
 
+    @DeleteMapping("/{id}/sessions")
+    suspend fun revokeAllOtherSessions(
+        @PathVariable id: UUID,
+        @AuthenticationPrincipal principal: AdminPrincipal,
+        request: ServerHttpRequest
+    ): ResponseEntity<RevokeAllResponse> {
+        if (principal.id != id) throw ForbiddenException("Can only revoke own sessions")
+        val token = extractAccessToken(request)
+        val tokenHash = if (token != null) TokenHashUtil.sha256(token) else ""
+        val revoked = sessionService.revokeAllOtherSessions(id, tokenHash)
+        return ResponseEntity.ok(RevokeAllResponse(revoked))
+    }
+
+    @DeleteMapping("/{id}/sessions/all")
+    suspend fun deleteAllSessions(
+        @PathVariable id: UUID,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<RevokeAllResponse> {
+        if (principal.id != id) throw ForbiddenException("Can only revoke own sessions")
+        val revoked = sessionService.deleteAllForAdmin(id)
+        refreshTokenService.revokeAll(id)
+        val cookieProperties = appProperties.cookie
+        return ResponseEntity.ok()
+            .header(HttpHeaders.SET_COOKIE, clearCookie(cookieProperties.name, cookieProperties.path).toString())
+            .header(HttpHeaders.SET_COOKIE, clearCookie(cookieProperties.refreshName, cookieProperties.refreshPath).toString())
+            .body(RevokeAllResponse(revoked))
+    }
+
     @GetMapping
     suspend fun listAdmins(
         @RequestParam(required = false) storeId: UUID?,
@@ -173,6 +205,22 @@ class AdminController(
         return request.cookies.getFirst(appProperties.cookie.name)
             ?.value
             ?.takeIf { it.isNotBlank() }
+    }
+
+    private fun clearCookie(name: String, path: String): ResponseCookie {
+        val cookieProperties = appProperties.cookie
+        val builder = ResponseCookie.from(name, "")
+            .httpOnly(true)
+            .secure(cookieProperties.secure)
+            .sameSite(cookieProperties.sameSite)
+            .path(path)
+            .maxAge(0)
+
+        cookieProperties.domain
+            ?.takeIf { it.isNotBlank() }
+            ?.let(builder::domain)
+
+        return builder.build()
     }
 
     private fun requireSuperAdmin(principal: AdminPrincipal) {

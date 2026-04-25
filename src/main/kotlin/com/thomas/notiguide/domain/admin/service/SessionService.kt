@@ -49,6 +49,23 @@ class SessionService(
         sessionRepository.deleteById(sessionId)
     }
 
+    suspend fun revokeAllOtherSessions(adminId: UUID, currentTokenHash: String): Int {
+        val others = sessionRepository.findByAdminIdOrderByLastActiveDesc(adminId)
+            .toList()
+            .filter { it.tokenHash != currentTokenHash }
+
+        if (others.isEmpty()) return 0
+
+        val ttl = Duration.ofSeconds(jwtProperties.accessExpirySeconds)
+        others.forEach { session ->
+            redis.opsForValue()
+                .set(RedisKeyManager.revokedToken(session.tokenHash), "1", ttl)
+                .awaitSingle()
+            session.id?.let { sessionRepository.deleteById(it) }
+        }
+        return others.size
+    }
+
     suspend fun updateLastActive(tokenHash: String) {
         val throttleKey = RedisKeyManager.sessionLastUpdate(tokenHash)
         val set = redis.opsForValue()
@@ -64,8 +81,18 @@ class SessionService(
         return redis.hasKey(RedisKeyManager.revokedToken(tokenHash)).awaitSingle()
     }
 
-    suspend fun deleteAllForAdmin(adminId: UUID) {
+    suspend fun deleteAllForAdmin(adminId: UUID): Int {
+        val all = sessionRepository.findByAdminIdOrderByLastActiveDesc(adminId).toList()
+        if (all.isEmpty()) return 0
+
+        val ttl = Duration.ofSeconds(jwtProperties.accessExpirySeconds)
+        all.forEach { session ->
+            redis.opsForValue()
+                .set(RedisKeyManager.revokedToken(session.tokenHash), "1", ttl)
+                .awaitSingle()
+        }
         sessionRepository.deleteByAdminId(adminId)
+        return all.size
     }
 
     suspend fun deleteByTokenHash(tokenHash: String) {
