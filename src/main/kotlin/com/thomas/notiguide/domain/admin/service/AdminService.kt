@@ -244,8 +244,8 @@ class AdminService(
         )
     }
 
-    suspend fun recordLoginAttempt(adminId: UUID, ipAddress: String, success: Boolean) {
-        loginHistoryRepository.save(
+    suspend fun recordLoginAttempt(adminId: UUID, ipAddress: String, success: Boolean): LoginHistory {
+        return loginHistoryRepository.save(
             LoginHistory(adminId = adminId, ipAddress = ipAddress, success = success)
         )
     }

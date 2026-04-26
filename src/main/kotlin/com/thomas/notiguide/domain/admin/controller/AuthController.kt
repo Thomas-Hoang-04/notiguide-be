@@ -4,10 +4,12 @@ import com.thomas.notiguide.core.config.AppProperties
 import com.thomas.notiguide.core.config.JWTProperties
 import com.thomas.notiguide.core.exception.UnverifiedAdminException
 import com.thomas.notiguide.core.jwt.JWTManager
+import com.thomas.notiguide.core.jwt.LoginAbortService
 import com.thomas.notiguide.core.jwt.RefreshTokenService
 import com.thomas.notiguide.core.jwt.TokenHashUtil
 import com.thomas.notiguide.domain.admin.dto.LoginResponse
 import com.thomas.notiguide.domain.admin.repository.AdminRepository
+import com.thomas.notiguide.domain.admin.request.AbortLoginRequest
 import com.thomas.notiguide.domain.admin.request.LoginRequest
 import com.thomas.notiguide.domain.admin.service.AdminService
 import com.thomas.notiguide.domain.admin.service.SessionService
@@ -36,7 +38,8 @@ class AuthController(
     private val jwtProperties: JWTProperties,
     private val appProperties: AppProperties,
     private val adminService: AdminService,
-    private val sessionService: SessionService
+    private val sessionService: SessionService,
+    private val loginAbortService: LoginAbortService
 ) {
 
     @PostMapping("/login")
@@ -58,7 +61,9 @@ class AuthController(
             throw UnverifiedAdminException()
         }
 
-        adminService.recordLoginAttempt(admin.id!!, ip, success = true)
+        val loginHistoryRow = adminService.recordLoginAttempt(admin.id!!, ip, success = true)
+        val loginHistoryId = loginHistoryRow.id
+            ?: throw IllegalStateException("Saved login history row is missing its id")
 
         val storeName = admin.storeId?.let { storeRepository.findById(it)?.name }
         val accessToken = jwtManager.issue(admin.id, listOf(admin.role.name))
@@ -68,10 +73,46 @@ class AuthController(
         val userAgent = serverRequest.headers.getFirst("User-Agent")
         val session = sessionService.createSession(admin.id, tokenHash, ip, userAgent)
 
+        // Mint a one-shot abort token so the client can roll back this
+        // session/refresh-token/login-history triple if its post-login
+        // verification ping reveals the Set-Cookie did not stick.
+        // If we cannot provision that rollback capability, we clean up the
+        // just-created artifacts and fail the login instead of returning a
+        // "successful" response with no recovery path.
+        val abortToken = try {
+            loginAbortService.issue(tokenHash, refreshToken, loginHistoryId)
+        } catch (ex: Exception) {
+            runCatching {
+                loginAbortService.rollbackArtifacts(tokenHash, refreshToken, loginHistoryId)
+            }.onFailure { rollbackEx ->
+                ex.addSuppressed(rollbackEx)
+            }
+            throw IllegalStateException("Failed to provision login rollback token", ex)
+        }
+
         return ResponseEntity.ok()
             .header(HttpHeaders.SET_COOKIE, buildAccessCookie(accessToken).toString())
             .header(HttpHeaders.SET_COOKIE, buildRefreshCookie(refreshToken).toString())
-            .body(LoginResponse(admin = admin.toDto(storeName), sessionId = session.id?.toString()))
+            .body(
+                LoginResponse(
+                    admin = admin.toDto(storeName),
+                    sessionId = session.id?.toString(),
+                    abortToken = abortToken
+                )
+            )
+    }
+
+    @PostMapping("/abort")
+    suspend fun abort(@Valid @RequestBody request: AbortLoginRequest): ResponseEntity<Void> {
+        // Public endpoint — body-authenticated by the one-shot opaque abort
+        // token (Redis-backed, ~60s TTL). Returns 204 regardless of whether
+        // the token matched, to avoid leaking timing/oracle signal about
+        // valid vs invalid tokens to a probing client.
+        loginAbortService.consume(request.abortToken)
+        return ResponseEntity.noContent()
+            .header(HttpHeaders.SET_COOKIE, clearCookie(appProperties.cookie.name, appProperties.cookie.path).toString())
+            .header(HttpHeaders.SET_COOKIE, clearCookie(appProperties.cookie.refreshName, appProperties.cookie.refreshPath).toString())
+            .build()
     }
 
     @PostMapping("/refresh")

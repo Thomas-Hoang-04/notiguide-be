@@ -16,6 +16,8 @@ object RedisKeyManager {
     fun fcmTokenPattern(storeId: UUID) = "fcm:$storeId:*"
     fun refreshToken(token: String) = "refresh:$token"
     fun adminRefreshTokens(adminId: UUID) = "admin:$adminId:refresh_tokens"
+    fun loginAbortToken(token: String) = "auth:abort:$token"
+    fun loginAbortLock(token: String) = "auth:abort:lock:$token"
 
     fun queueState(storeId: UUID) = "store:$storeId:queue_state"
     fun storeSettings(storeId: UUID) = "store:$storeId:settings"
