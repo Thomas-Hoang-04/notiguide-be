@@ -33,7 +33,7 @@ class RateLimitFilter(
         if (!rateLimitProperties.enabled)
             return chain.filter(exchange)
 
-        val tier = resolveTier(exchange.request.path.value()) ?: return chain.filter(exchange)
+        val tier = resolveTier(exchange.request.method, exchange.request.path.value()) ?: return chain.filter(exchange)
         val clientIp = ClientIpResolver.resolve(exchange.request)
         val key = "ratelimit:${tier.key}:$clientIp"
         val result = rateLimiter.isAllowed(key, tier.config.windowSeconds, tier.config.maxRequests)
@@ -49,7 +49,9 @@ class RateLimitFilter(
         writeLimitExceededResponse(exchange, result)
     }
 
-    private fun resolveTier(path: String): TierMatch? = when {
+    private fun resolveTier(method: HttpMethod?, path: String): TierMatch? = when {
+        method == HttpMethod.POST && path == "/api/devices/enrollment-tokens" ->
+            TierMatch(key = "strict", config = rateLimitProperties.strict)
         path == "/api/queue/public" || path.startsWith("/api/queue/public/") ->
             TierMatch(key = "strict", config = rateLimitProperties.strict)
         path == "/api/auth" || path.startsWith("/api/auth/") ->

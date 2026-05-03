@@ -7,6 +7,7 @@ import org.eclipse.paho.mqttv5.client.MqttConnectionOptions
 import org.eclipse.paho.mqttv5.client.MqttDisconnectResponse
 import org.eclipse.paho.mqttv5.common.MqttException
 import org.eclipse.paho.mqttv5.common.MqttMessage
+import org.eclipse.paho.mqttv5.common.MqttSubscription
 import org.eclipse.paho.mqttv5.common.packet.MqttProperties as PahoMqttProperties
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
@@ -20,10 +21,7 @@ class MqttClientManager(
 
     private val log = LoggerFactory.getLogger(this::class.java)
     private val messageHandlers = CopyOnWriteArrayList<MqttMessageHandler>()
-    private val activeSubscriptions = ConcurrentHashMap<String, Int>()
-
-    val isConnected: Boolean
-        get() = client.isConnected
+    private val activeSubscriptions = ConcurrentHashMap<String, SubscriptionDescriptor>()
 
     fun connect() {
         client.setCallback(this)
@@ -63,17 +61,16 @@ class MqttClientManager(
     }
 
     fun subscribe(topicFilter: String, qos: Int = mqttProperties.qos) {
-        activeSubscriptions[topicFilter] = qos
+        subscribe(SubscriptionDescriptor(topicFilter = topicFilter, qos = qos))
+    }
+
+    fun subscribe(descriptor: SubscriptionDescriptor) {
+        activeSubscriptions[descriptor.topicFilter] = descriptor
         if (!client.isConnected) {
-            log.debug("MQTT not connected, deferring subscribe to {}", topicFilter)
+            log.debug("MQTT not connected, deferring subscribe to {}", descriptor.topicFilter)
             return
         }
-        try {
-            client.subscribe(topicFilter, qos)
-            log.info("MQTT subscribed to {}", topicFilter)
-        } catch (e: MqttException) {
-            log.warn("MQTT subscribe failed on {}: {}", topicFilter, e.message)
-        }
+        subscribeInternal(descriptor)
     }
 
     fun unsubscribe(topicFilter: String) {
@@ -131,13 +128,37 @@ class MqttClientManager(
     }
 
     private fun resubscribeAll() {
-        for ((topic, qos) in activeSubscriptions) {
-            try {
-                client.subscribe(topic, qos)
-                log.info("MQTT re-subscribed to {} after reconnect", topic)
-            } catch (e: MqttException) {
-                log.warn("MQTT re-subscribe failed on {}: {}", topic, e.message)
+        for (descriptor in activeSubscriptions.values) {
+            subscribeInternal(descriptor, isReconnect = true)
+        }
+    }
+
+    private fun subscribeInternal(
+        descriptor: SubscriptionDescriptor,
+        isReconnect: Boolean = false
+    ) {
+        try {
+            val subscription = MqttSubscription(descriptor.topicFilter, descriptor.qos).apply {
+                setNoLocal(descriptor.noLocal)
+            }
+            client.subscribe(subscription)
+            if (isReconnect) {
+                log.info("MQTT re-subscribed to {} after reconnect", descriptor.topicFilter)
+            } else {
+                log.info("MQTT subscribed to {}", descriptor.topicFilter)
+            }
+        } catch (e: MqttException) {
+            if (isReconnect) {
+                log.warn("MQTT re-subscribe failed on {}: {}", descriptor.topicFilter, e.message)
+            } else {
+                log.warn("MQTT subscribe failed on {}: {}", descriptor.topicFilter, e.message)
             }
         }
     }
+
+    data class SubscriptionDescriptor(
+        val topicFilter: String,
+        val qos: Int = 1,
+        val noLocal: Boolean = false
+    )
 }

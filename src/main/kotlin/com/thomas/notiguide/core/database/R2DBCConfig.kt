@@ -1,6 +1,11 @@
 package com.thomas.notiguide.core.database
 
 import com.thomas.notiguide.core.config.AppProperties
+import com.thomas.notiguide.domain.admin.types.AdminRole
+import com.thomas.notiguide.domain.device.types.DeviceHardwareModel
+import com.thomas.notiguide.domain.device.types.DeviceKind
+import com.thomas.notiguide.domain.device.types.DeviceRfAckStatus
+import com.thomas.notiguide.domain.device.types.DeviceStatus
 import com.thomas.notiguide.shared.principal.AdminPrincipal
 import io.r2dbc.pool.ConnectionPool
 import io.r2dbc.pool.ConnectionPoolConfiguration
@@ -9,7 +14,6 @@ import io.r2dbc.postgresql.PostgresqlConnectionConfiguration
 import io.r2dbc.postgresql.PostgresqlConnectionFactory
 import io.r2dbc.spi.ConnectionFactory
 import io.r2dbc.spi.ConnectionFactoryMetadata
-import com.thomas.notiguide.domain.admin.types.AdminRole
 import io.r2dbc.postgresql.codec.EnumCodec
 import org.slf4j.LoggerFactory
 import java.net.URI
@@ -80,6 +84,10 @@ class R2DBCConfig(
             .codecRegistrar(
                 EnumCodec.builder()
                     .withEnum("admin_role", AdminRole::class.java)
+                    .withEnum("device_kind", DeviceKind::class.java)
+                    .withEnum("device_hardware_model", DeviceHardwareModel::class.java)
+                    .withEnum("device_status", DeviceStatus::class.java)
+                    .withEnum("device_rf_ack_status", DeviceRfAckStatus::class.java)
                     .build()
             )
             .build()
@@ -109,11 +117,27 @@ class R2DBCConfig(
 
     @Bean
     override fun getCustomConverters(): List<Any?> = listOf(
-        AdminRoleWriteConverter
+        AdminRoleWriteConverter,
+        DeviceKindWriteConverter,
+        DeviceHardwareModelWriteConverter,
+        DeviceStatusWriteConverter,
+        DeviceRfAckStatusWriteConverter
     )
 
     @WritingConverter
     object AdminRoleWriteConverter : EnumWriteSupport<AdminRole>()
+
+    @WritingConverter
+    object DeviceKindWriteConverter : EnumWriteSupport<DeviceKind>()
+
+    @WritingConverter
+    object DeviceHardwareModelWriteConverter : EnumWriteSupport<DeviceHardwareModel>()
+
+    @WritingConverter
+    object DeviceStatusWriteConverter : EnumWriteSupport<DeviceStatus>()
+
+    @WritingConverter
+    object DeviceRfAckStatusWriteConverter : EnumWriteSupport<DeviceRfAckStatus>()
 
     private class LoggingConnectionFactory(
         private val delegate: ConnectionFactory,

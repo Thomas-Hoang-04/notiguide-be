@@ -22,6 +22,31 @@ CREATE TYPE analytics_event_type AS ENUM (
     'TICKET_SKIPPED',
     'DEVICE_TRIGGERED'
 );
+CREATE TYPE device_kind AS ENUM (
+    'RECEIVER_433M',
+    'RECEIVER_433M_PASSIVE',
+    'RECEIVER_2_4G',
+    'TRANSMITTER_HUB'
+);
+CREATE TYPE device_hardware_model AS ENUM (
+    'ESP_01',
+    'ESP32_C3',
+    'PT2272'
+);
+CREATE TYPE device_status AS ENUM (
+    'PENDING',
+    'PENDING_RF_CODE',
+    'ACTIVE',
+    'SUSPENDED',
+    'DECOMMISSIONED',
+    'REJECTED'
+);
+CREATE TYPE device_rf_ack_status AS ENUM (
+    'PENDING',
+    'APPLIED',
+    'UNCHANGED',
+    'REJECTED'
+);
 
 CREATE OR REPLACE FUNCTION generate_store_public_id() RETURNS TEXT AS $$
 DECLARE
@@ -73,18 +98,63 @@ CREATE TABLE admin (
 CREATE UNIQUE INDEX idx_admin_username_lower ON admin(LOWER(username));
 CREATE INDEX idx_admin_store ON admin(store_id);
 
-CREATE TABLE notifier_device (
+CREATE TABLE device (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    device_token TEXT UNIQUE NOT NULL,
-    name VARCHAR(100),
-    store_id UUID REFERENCES store(id) ON DELETE CASCADE,
-    is_active BOOLEAN DEFAULT TRUE,
-    battery_level INT CHECK (battery_level >= 0 AND battery_level <= 100),
-    last_ping TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    public_id VARCHAR(32),
+    public_key_der BYTEA,
+    hardware_model device_hardware_model NOT NULL,
+    kind device_kind NOT NULL,
+    status device_status NOT NULL DEFAULT 'PENDING',
+    assigned_name VARCHAR(100),
+    store_id UUID REFERENCES store(id) ON DELETE SET NULL,
+    firmware_version VARCHAR(32),
+    last_seen_at TIMESTAMP WITH TIME ZONE,
+    activated_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_notifier_device_store ON notifier_device(store_id);
+CREATE UNIQUE INDEX idx_device_public_id ON device(public_id) WHERE public_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_device_public_key_der ON device(public_key_der) WHERE public_key_der IS NOT NULL;
+CREATE INDEX idx_device_store ON device(store_id);
+CREATE INDEX idx_device_status ON device(status);
+CREATE INDEX idx_device_kind ON device(kind);
+
+CREATE TABLE device_rf_code (
+    device_id UUID PRIMARY KEY REFERENCES device(id) ON DELETE CASCADE,
+    payload BYTEA NOT NULL,
+    bits SMALLINT NOT NULL,
+    byte_len SMALLINT NOT NULL,
+    version INT NOT NULL,
+    issued_at TIMESTAMPTZ NOT NULL,
+    ack device_rf_ack_status NOT NULL DEFAULT 'PENDING',
+    ack_at TIMESTAMPTZ,
+    CONSTRAINT chk_rf_bits CHECK (bits BETWEEN 1 AND 256),
+    CONSTRAINT chk_rf_byte_len CHECK (byte_len BETWEEN 1 AND 32),
+    CONSTRAINT chk_rf_byte_math CHECK (byte_len = (bits + 7) / 8)
+);
+
+CREATE OR REPLACE FUNCTION device_rf_code_kind_check() RETURNS TRIGGER AS $$
+DECLARE
+    k device_kind;
+BEGIN
+    SELECT kind INTO k FROM device WHERE id = NEW.device_id;
+    IF k = 'TRANSMITTER_HUB' THEN
+        RAISE EXCEPTION 'TRANSMITTER_HUB never owns a device_rf_code row';
+    ELSIF k = 'RECEIVER_2_4G' AND (NEW.bits <> 40 OR NEW.byte_len <> 5) THEN
+        RAISE EXCEPTION 'RECEIVER_2_4G requires bits = 40 and byte_len = 5';
+    ELSIF k = 'RECEIVER_433M' AND NEW.bits NOT BETWEEN 1 AND 32 THEN
+        RAISE EXCEPTION 'RECEIVER_433M requires bits BETWEEN 1 AND 32';
+    ELSIF k = 'RECEIVER_433M_PASSIVE' AND NEW.bits <> 16 THEN
+        RAISE EXCEPTION 'RECEIVER_433M_PASSIVE requires bits = 16';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_device_rf_code_kind_check
+    BEFORE INSERT OR UPDATE ON device_rf_code
+    FOR EACH ROW EXECUTE FUNCTION device_rf_code_kind_check();
 
 CREATE TABLE analytics_event (
     time TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -92,7 +162,7 @@ CREATE TABLE analytics_event (
     event_type analytics_event_type NOT NULL,
     ticket_id UUID,
     wait_duration_seconds INT,
-    device_id UUID REFERENCES notifier_device(id) ON DELETE SET NULL,
+    device_id UUID REFERENCES device(id) ON DELETE SET NULL,
     metadata JSONB
 );
 
