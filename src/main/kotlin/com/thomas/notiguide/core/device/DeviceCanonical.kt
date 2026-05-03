@@ -26,7 +26,7 @@ object DeviceCanonical {
         issuedAt: OffsetDateTime
     ): String = "deact-v1|$publicId|$commandId|$action|${issuedAt.toInstant()}"
 
-    fun transmitV1(
+    fun transmit(
         hubPublicId: String,
         dispatchId: UUID,
         receiverPublicId: String,

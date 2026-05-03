@@ -108,7 +108,7 @@ class DeviceRegistrationService(
             nonce = null,
             issuedAt = now,
             expiresAt = expiresAt,
-            status = "PENDING"
+            status = DeviceActivationStatus.PENDING
         )
         val activationByDevice = DeviceActivationByDeviceRecord(challengeId = challengeId)
         val activationJson = objectMapper.writeValueAsString(activationRecord)
@@ -331,18 +331,4 @@ private data class TransmitterBootstrapRegistration(
     val enrollmentToken: String = "",
     @field:JsonProperty("registration_nonce")
     val registrationNonce: String = ""
-)
-
-private data class DeviceActivationRecord(
-    val deviceId: UUID,
-    val publicKeyFingerprint: String,
-    val registrationNonce: String,
-    val nonce: String?,
-    val issuedAt: OffsetDateTime,
-    val expiresAt: OffsetDateTime,
-    val status: String
-)
-
-private data class DeviceActivationByDeviceRecord(
-    val challengeId: UUID
 )

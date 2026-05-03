@@ -1,6 +1,10 @@
 package com.thomas.notiguide.domain.device.service
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.thomas.notiguide.core.redis.RedisKeyManager
+import com.thomas.notiguide.domain.device.dto.DeviceDetailDto
 import com.thomas.notiguide.domain.device.dto.DeviceDto
+import com.thomas.notiguide.domain.device.dto.DeviceLifecycleCommandDto
 import com.thomas.notiguide.domain.device.dto.DeviceListResponse
 import com.thomas.notiguide.domain.device.dto.DeviceRfCodeSummaryDto
 import com.thomas.notiguide.domain.device.types.DeviceHardwareModel
@@ -11,6 +15,7 @@ import io.r2dbc.spi.Readable
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.reactive.asFlow
 import kotlinx.coroutines.reactor.awaitSingleOrNull
+import org.springframework.data.redis.core.ReactiveRedisTemplate
 import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.stereotype.Service
 import java.time.OffsetDateTime
@@ -18,7 +23,9 @@ import java.util.UUID
 
 @Service
 class DeviceQueryService(
-    private val client: DatabaseClient
+    private val client: DatabaseClient,
+    private val redis: ReactiveRedisTemplate<String, String>,
+    private val objectMapper: ObjectMapper
 ) {
 
     suspend fun listDevices(
@@ -83,6 +90,15 @@ class DeviceQueryService(
     suspend fun getRequiredDeviceById(deviceId: UUID): DeviceDto =
         findDeviceById(deviceId) ?: throw IllegalStateException("Newly-created device '$deviceId' could not be reloaded")
 
+    suspend fun getRequiredDeviceDetailById(deviceId: UUID): DeviceDetailDto =
+        findDeviceDetailById(deviceId)
+            ?: throw IllegalStateException("Device '$deviceId' could not be reloaded")
+
+    suspend fun findDeviceDetailById(deviceId: UUID): DeviceDetailDto? {
+        val device = findDeviceById(deviceId) ?: return null
+        return device.toDetail(loadLifecycleCommand(deviceId))
+    }
+
     suspend fun findDeviceById(deviceId: UUID): DeviceDto? =
         client.sql(
             """
@@ -119,6 +135,25 @@ class DeviceQueryService(
             .awaitSingleOrNull()
             ?.device
 
+    private suspend fun loadLifecycleCommand(deviceId: UUID): DeviceLifecycleCommandDto? {
+        val payload = runCatching {
+            redis.opsForValue()
+                .get(RedisKeyManager.deviceLifecycleCommand(deviceId))
+                .awaitSingleOrNull()
+        }.getOrNull() ?: return null
+
+        val command = runCatching {
+            objectMapper.readValue(payload, DeviceLifecycleCommandRecord::class.java)
+        }.getOrNull() ?: return null
+
+        return DeviceLifecycleCommandDto(
+            commandId = command.commandId,
+            action = command.action,
+            ackStatus = command.ackStatus,
+            issuedAt = command.issuedAt
+        )
+    }
+
     private fun mapRow(row: Readable): DeviceRow = DeviceRow(
         device = DeviceDto(
             id = row.get("id", UUID::class.java)!!,
@@ -148,6 +183,25 @@ class DeviceQueryService(
         registeredCount = row.get("registered_count", Long::class.java)
     )
 }
+
+private fun DeviceDto.toDetail(lifecycleCommand: DeviceLifecycleCommandDto?): DeviceDetailDto =
+    DeviceDetailDto(
+        id = id,
+        publicId = publicId,
+        hardwareModel = hardwareModel,
+        kind = kind,
+        status = status,
+        assignedName = assignedName,
+        storeId = storeId,
+        storeName = storeName,
+        firmwareVersion = firmwareVersion,
+        lastSeenAt = lastSeenAt,
+        activatedAt = activatedAt,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        rfCode = rfCode,
+        lifecycleCommand = lifecycleCommand
+    )
 
 private data class DeviceRow(
     val device: DeviceDto,

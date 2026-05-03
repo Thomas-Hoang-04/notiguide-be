@@ -51,6 +51,56 @@ class DeviceMqttPublisher(
         )
     }
 
+    suspend fun publishRejected(
+        kind: DeviceKind,
+        challengeId: UUID,
+        reason: String
+    ) {
+        publishJson(
+            topic = bootstrapTopic(kind, challengeId),
+            payload = RejectedEnvelope(
+                challengeId = challengeId,
+                reason = reason
+            )
+        )
+    }
+
+    suspend fun publishChallenge(
+        kind: DeviceKind,
+        challengeId: UUID,
+        registrationNonce: String,
+        nonce: String,
+        issuedAt: OffsetDateTime,
+        expiresAt: OffsetDateTime
+    ) {
+        publishJson(
+            topic = bootstrapTopic(kind, challengeId),
+            payload = ChallengeEnvelope(
+                challengeId = challengeId,
+                registrationNonce = registrationNonce,
+                nonce = nonce,
+                issuedAt = issuedAt.toInstant().toString(),
+                expiresAt = expiresAt.toInstant().toString()
+            )
+        )
+    }
+
+    suspend fun publishResult(
+        kind: DeviceKind,
+        challengeId: UUID,
+        publicId: String,
+        assignedDeviceName: String
+    ) {
+        publishJson(
+            topic = bootstrapTopic(kind, challengeId),
+            payload = ResultEnvelope(
+                challengeId = challengeId,
+                publicId = publicId,
+                assignedDeviceName = assignedDeviceName
+            )
+        )
+    }
+
     suspend fun publishRfCode(
         publicId: String,
         payload: Any
@@ -132,6 +182,12 @@ class DeviceMqttPublisher(
     private fun bootstrapTopic(family: DeviceFamily, challengeId: UUID): String =
         "${mqttProperties.topicPrefix}/${family.topicSegment}/bootstrap/$challengeId"
 
+    private fun bootstrapTopic(kind: DeviceKind, challengeId: UUID): String =
+        bootstrapTopic(
+            family = if (kind.isHub()) DeviceFamily.TRANSMITTER else DeviceFamily.RECEIVER,
+            challengeId = challengeId
+        )
+
     private data class PendingEnvelope(
         @field:JsonProperty("schema_version")
         val schemaVersion: Int = 1,
@@ -151,5 +207,34 @@ class DeviceMqttPublisher(
         @field:JsonProperty("challenge_id")
         val challengeId: UUID,
         val reason: String
+    )
+
+    private data class ChallengeEnvelope(
+        @field:JsonProperty("schema_version")
+        val schemaVersion: Int = 1,
+        val type: String = "challenge",
+        @field:JsonProperty("challenge_id")
+        val challengeId: UUID,
+        @field:JsonProperty("registration_nonce")
+        val registrationNonce: String,
+        val nonce: String,
+        @field:JsonProperty("issued_at")
+        val issuedAt: String,
+        @field:JsonProperty("expires_at")
+        val expiresAt: String,
+        val purpose: String = "activate-v1"
+    )
+
+    private data class ResultEnvelope(
+        @field:JsonProperty("schema_version")
+        val schemaVersion: Int = 1,
+        val type: String = "result",
+        @field:JsonProperty("challenge_id")
+        val challengeId: UUID,
+        val status: String = "active",
+        @field:JsonProperty("public_id")
+        val publicId: String,
+        @field:JsonProperty("assigned_device_name")
+        val assignedDeviceName: String
     )
 }

@@ -16,6 +16,9 @@ interface DeviceRepository : CoroutineCrudRepository<Device, UUID> {
     @Query("SELECT EXISTS(SELECT 1 FROM device WHERE public_id = :publicId)")
     suspend fun existsByPublicId(publicId: String): Boolean
 
+    @Query("SELECT * FROM device WHERE public_id = :publicId LIMIT 1")
+    suspend fun findByPublicId(publicId: String): Device?
+
     @Query(
         """
         SELECT COUNT(*)

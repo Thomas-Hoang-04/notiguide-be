@@ -22,6 +22,7 @@ object RedisKeyManager {
     fun enrollmentTokenPattern() = "enroll:*"
     fun deviceActivation(challengeId: UUID) = "device:activation:$challengeId"
     fun deviceActivationByDevice(deviceId: UUID) = "device:activation-by-device:$deviceId"
+    fun devicePriorPublicId(deviceId: UUID) = "device:prior-public-id:$deviceId"
     fun deviceLifecycleCommand(deviceId: UUID) = "device:lifecycle:$deviceId"
     fun deviceBusy(deviceId: UUID) = "device:busy:$deviceId"
     fun deviceHubAlive(deviceId: UUID) = "device:hub:alive:$deviceId"
