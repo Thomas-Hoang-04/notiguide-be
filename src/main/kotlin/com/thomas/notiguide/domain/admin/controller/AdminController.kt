@@ -5,10 +5,10 @@ import com.thomas.notiguide.core.exception.ForbiddenException
 import com.thomas.notiguide.core.jwt.RefreshTokenService
 import com.thomas.notiguide.core.jwt.TokenHashUtil
 import com.thomas.notiguide.domain.admin.dto.AdminDto
-import com.thomas.notiguide.domain.admin.dto.AdminPageResponse
+import com.thomas.notiguide.domain.admin.response.AdminPageResponse
 import com.thomas.notiguide.domain.admin.dto.AdminSessionDto
-import com.thomas.notiguide.domain.admin.dto.LoginHistoryPageResponse
-import com.thomas.notiguide.domain.admin.dto.RevokeAllResponse
+import com.thomas.notiguide.domain.admin.response.LoginHistoryPageResponse
+import com.thomas.notiguide.domain.admin.response.RevokeAllResponse
 import com.thomas.notiguide.domain.admin.types.AdminRole
 import com.thomas.notiguide.domain.admin.request.CreateAdminRequest
 import com.thomas.notiguide.domain.admin.request.UpdateAdminStoreRequest

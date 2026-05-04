@@ -1,4 +1,4 @@
-package com.thomas.notiguide.domain.queue.dto
+package com.thomas.notiguide.domain.queue.response
 
 data class StorePublicInfoResponse(
     val publicId: String,

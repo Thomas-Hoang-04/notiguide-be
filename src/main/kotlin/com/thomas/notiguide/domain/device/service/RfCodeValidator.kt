@@ -1,5 +1,6 @@
 package com.thomas.notiguide.domain.device.service
 
+import com.thomas.notiguide.domain.device.controller.DeviceBadRequestEnvelopeException
 import com.thomas.notiguide.domain.device.types.DeviceKind
 import org.springframework.stereotype.Component
 

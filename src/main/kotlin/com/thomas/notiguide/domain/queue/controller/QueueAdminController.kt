@@ -2,17 +2,22 @@ package com.thomas.notiguide.domain.queue.controller
 
 import com.thomas.notiguide.core.sse.QueueEventBroadcaster
 import com.thomas.notiguide.core.sse.QueueSseEvent
-import com.thomas.notiguide.domain.queue.dto.NextTicketResponse
-import com.thomas.notiguide.domain.queue.dto.QueueSizeResponse
+import com.thomas.notiguide.domain.device.service.DeviceDispatchService
+import com.thomas.notiguide.domain.queue.response.NextTicketResponse
+import com.thomas.notiguide.domain.queue.response.QueueDispatchAvailabilityResponse
+import com.thomas.notiguide.domain.queue.response.QueueSizeResponse
 import com.thomas.notiguide.domain.queue.dto.TicketDto
-import com.thomas.notiguide.domain.queue.dto.TicketStatusResponse
+import com.thomas.notiguide.domain.queue.response.TicketStatusResponse
+import com.thomas.notiguide.domain.queue.request.IssueDeviceTicketRequest
 import com.thomas.notiguide.domain.queue.service.QueueService
 import com.thomas.notiguide.domain.queue.types.CallNextResult
 import com.thomas.notiguide.domain.queue.types.QueueState
 import com.thomas.notiguide.shared.principal.AdminPrincipal
 import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import jakarta.validation.Valid
 import jakarta.validation.constraints.Size
 import org.springframework.http.MediaType
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.codec.ServerSentEvent
 import org.springframework.security.core.annotation.AuthenticationPrincipal
@@ -20,6 +25,7 @@ import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
@@ -32,7 +38,8 @@ import java.util.UUID
 @RequestMapping("/api/queue/admin/{storeId}")
 class QueueAdminController(
     private val queueService: QueueService,
-    private val queueEventBroadcaster: QueueEventBroadcaster
+    private val queueEventBroadcaster: QueueEventBroadcaster,
+    private val deviceDispatchService: DeviceDispatchService
 ) {
 
     @GetMapping("/size")
@@ -53,6 +60,30 @@ class QueueAdminController(
         StoreAccessUtil.requireStoreAccess(principal, storeId)
         val tickets = queueService.listWaitingTickets(storeId)
         return ResponseEntity.ok(tickets)
+    }
+
+    @GetMapping("/available-devices")
+    suspend fun getAvailableDevices(
+        @PathVariable storeId: UUID,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<QueueDispatchAvailabilityResponse> {
+        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        return ResponseEntity.ok(deviceDispatchService.getAvailableDevices(storeId))
+    }
+
+    @PostMapping("/device-tickets")
+    suspend fun issueDeviceTicket(
+        @PathVariable storeId: UUID,
+        @Valid @RequestBody request: IssueDeviceTicketRequest,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<TicketDto> {
+        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        val ticket = deviceDispatchService.issueDeviceTicket(
+            storeId = storeId,
+            deviceId = request.deviceId,
+            serviceTypeId = request.serviceTypeId
+        )
+        return ResponseEntity.status(HttpStatus.CREATED).body(ticket)
     }
 
     @GetMapping("/tickets/{ticketId}")

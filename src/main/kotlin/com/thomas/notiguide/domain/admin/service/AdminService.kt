@@ -6,9 +6,9 @@ import com.thomas.notiguide.core.exception.HttpException
 import com.thomas.notiguide.core.exception.NotFoundException
 import com.thomas.notiguide.core.jwt.RefreshTokenService
 import com.thomas.notiguide.domain.admin.dto.AdminDto
-import com.thomas.notiguide.domain.admin.dto.AdminPageResponse
+import com.thomas.notiguide.domain.admin.response.AdminPageResponse
 import com.thomas.notiguide.domain.admin.dto.LoginHistoryDto
-import com.thomas.notiguide.domain.admin.dto.LoginHistoryPageResponse
+import com.thomas.notiguide.domain.admin.response.LoginHistoryPageResponse
 import com.thomas.notiguide.domain.admin.entity.LoginHistory
 import com.thomas.notiguide.domain.admin.repository.LoginHistoryRepository
 import com.thomas.notiguide.domain.admin.repository.LoginHistoryQueryRepository

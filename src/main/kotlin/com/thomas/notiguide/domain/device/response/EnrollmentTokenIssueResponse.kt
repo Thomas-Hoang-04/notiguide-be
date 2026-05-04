@@ -1,4 +1,4 @@
-package com.thomas.notiguide.domain.device.dto
+package com.thomas.notiguide.domain.device.response
 
 import java.time.OffsetDateTime
 

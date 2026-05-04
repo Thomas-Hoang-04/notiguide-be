@@ -10,6 +10,9 @@ import com.thomas.notiguide.core.exception.ForbiddenException
 import com.thomas.notiguide.core.exception.NotFoundException
 import com.thomas.notiguide.core.exception.ServiceUnavailableException
 import com.thomas.notiguide.domain.admin.types.AdminRole
+import com.thomas.notiguide.domain.device.controller.DeviceBadRequestEnvelopeException
+import com.thomas.notiguide.domain.device.controller.DeviceConflictEnvelopeException
+import com.thomas.notiguide.domain.device.controller.DeviceServiceUnavailableEnvelopeException
 import com.thomas.notiguide.domain.device.dto.DeviceDetailDto
 import com.thomas.notiguide.domain.device.entity.Device
 import com.thomas.notiguide.domain.device.repository.DeviceRepository

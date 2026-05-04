@@ -1,4 +1,6 @@
-package com.thomas.notiguide.domain.admin.dto
+package com.thomas.notiguide.domain.admin.response
+
+import com.thomas.notiguide.domain.admin.dto.AdminDto
 
 data class LoginResponse(
     val admin: AdminDto,

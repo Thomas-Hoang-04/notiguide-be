@@ -1,4 +1,4 @@
-package com.thomas.notiguide.domain.device.service
+package com.thomas.notiguide.domain.device.controller
 
 class DeviceBadRequestEnvelopeException(
     val error: String,

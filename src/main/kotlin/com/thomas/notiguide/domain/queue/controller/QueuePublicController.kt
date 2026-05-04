@@ -3,10 +3,10 @@ package com.thomas.notiguide.domain.queue.controller
 import com.thomas.notiguide.core.exception.NotFoundException
 import com.thomas.notiguide.core.exception.ServiceUnavailableException
 import com.thomas.notiguide.core.firebase.FcmNotificationService
-import com.thomas.notiguide.domain.queue.dto.IssueTicketResponse
-import com.thomas.notiguide.domain.queue.dto.QueueSizeResponse
-import com.thomas.notiguide.domain.queue.dto.StorePublicInfoResponse
-import com.thomas.notiguide.domain.queue.dto.TicketStatusResponse
+import com.thomas.notiguide.domain.queue.response.IssueTicketResponse
+import com.thomas.notiguide.domain.queue.response.QueueSizeResponse
+import com.thomas.notiguide.domain.queue.response.StorePublicInfoResponse
+import com.thomas.notiguide.domain.queue.response.TicketStatusResponse
 import com.thomas.notiguide.domain.queue.request.RegisterFcmTokenRequest
 import com.thomas.notiguide.domain.queue.service.QueueService
 import com.thomas.notiguide.domain.store.dto.ServiceTypePublicDto

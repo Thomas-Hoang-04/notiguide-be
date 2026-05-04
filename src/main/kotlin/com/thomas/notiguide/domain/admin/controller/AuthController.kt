@@ -7,7 +7,7 @@ import com.thomas.notiguide.core.jwt.JWTManager
 import com.thomas.notiguide.core.jwt.LoginAbortService
 import com.thomas.notiguide.core.jwt.RefreshTokenService
 import com.thomas.notiguide.core.jwt.TokenHashUtil
-import com.thomas.notiguide.domain.admin.dto.LoginResponse
+import com.thomas.notiguide.domain.admin.response.LoginResponse
 import com.thomas.notiguide.domain.admin.repository.AdminRepository
 import com.thomas.notiguide.domain.admin.request.AbortLoginRequest
 import com.thomas.notiguide.domain.admin.request.LoginRequest

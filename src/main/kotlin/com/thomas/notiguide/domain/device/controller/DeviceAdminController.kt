@@ -4,7 +4,7 @@ import com.thomas.notiguide.core.exception.ForbiddenException
 import com.thomas.notiguide.domain.admin.types.AdminRole
 import com.thomas.notiguide.domain.device.dto.DeviceDetailDto
 import com.thomas.notiguide.domain.device.dto.DeviceDto
-import com.thomas.notiguide.domain.device.dto.DeviceListResponse
+import com.thomas.notiguide.domain.device.response.DeviceListResponse
 import com.thomas.notiguide.domain.device.request.ApproveDeviceRequest
 import com.thomas.notiguide.domain.device.request.DeviceLifecycleRequest
 import com.thomas.notiguide.domain.device.request.PassiveDeviceRegistrationRequest

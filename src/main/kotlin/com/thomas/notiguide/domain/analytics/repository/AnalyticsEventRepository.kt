@@ -1,6 +1,12 @@
 package com.thomas.notiguide.domain.analytics.repository
 
 import com.thomas.notiguide.domain.analytics.entity.AnalyticsEvent
+import com.thomas.notiguide.domain.analytics.repository.row.DailyCountRow
+import com.thomas.notiguide.domain.analytics.repository.row.HeatmapRow
+import com.thomas.notiguide.domain.analytics.repository.row.HourlyCountRow
+import com.thomas.notiguide.domain.analytics.repository.row.StoreOverviewRow
+import com.thomas.notiguide.domain.analytics.repository.row.StoreSummaryRow
+import com.thomas.notiguide.domain.analytics.repository.row.WaitBucketRow
 import io.r2dbc.spi.Readable
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.reactive.asFlow
@@ -13,53 +19,6 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.temporal.ChronoUnit
 import java.util.UUID
-
-data class StoreSummaryRow(
-    val totalIssued: Long,
-    val totalCompleted: Long,
-    val totalCancelled: Long,
-    val totalSkipped: Long,
-    val avgWaitSeconds: Double?,
-    val avgServiceSeconds: Double?,
-    val medianWaitSeconds: Double?,
-    val peakHour: Int?,
-    val cancelRate: Double?,
-    val skipRate: Double?
-)
-
-data class HourlyCountRow(
-    val hour: Int,
-    val avgTickets: Double
-)
-
-data class DailyCountRow(
-    val date: LocalDate,
-    val issued: Long,
-    val completed: Long,
-    val cancelled: Long,
-    val skipped: Long
-)
-
-data class StoreOverviewRow(
-    val storeId: UUID,
-    val storeName: String,
-    val issued: Long,
-    val completed: Long,
-    val cancelled: Long,
-    val skipped: Long,
-    val avgWaitSeconds: Double?
-)
-
-data class WaitBucketRow(
-    val bucket: Int,
-    val count: Long
-)
-
-data class HeatmapRow(
-    val dayOfWeek: Int,
-    val hour: Int,
-    val avgTickets: Double
-)
 
 @Repository
 class AnalyticsEventRepository(private val client: DatabaseClient) {
@@ -81,12 +40,6 @@ class AnalyticsEventRepository(private val client: DatabaseClient) {
             .fetch()
             .rowsUpdated()
             .awaitSingle()
-    }
-
-    suspend fun insertBatch(events: List<AnalyticsEvent>) {
-        for (event in events) {
-            insert(event)
-        }
     }
 
     suspend fun getSummary(storeId: UUID, from: OffsetDateTime, to: OffsetDateTime): StoreSummaryRow {

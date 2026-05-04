@@ -5,8 +5,9 @@ import com.thomas.notiguide.core.redis.RedisKeyManager
 import com.thomas.notiguide.domain.device.dto.DeviceDetailDto
 import com.thomas.notiguide.domain.device.dto.DeviceDto
 import com.thomas.notiguide.domain.device.dto.DeviceLifecycleCommandDto
-import com.thomas.notiguide.domain.device.dto.DeviceListResponse
+import com.thomas.notiguide.domain.device.response.DeviceListResponse
 import com.thomas.notiguide.domain.device.dto.DeviceRfCodeSummaryDto
+import com.thomas.notiguide.domain.device.redis.DeviceLifecycleCommandRecord
 import com.thomas.notiguide.domain.device.types.DeviceHardwareModel
 import com.thomas.notiguide.domain.device.types.DeviceKind
 import com.thomas.notiguide.domain.device.types.DeviceRfAckStatus

@@ -23,7 +23,7 @@ interface DeviceRepository : CoroutineCrudRepository<Device, UUID> {
         """
         SELECT COUNT(*)
         FROM device
-        WHERE kind = 'TRANSMITTER_HUB'
+        WHERE kind = 'TRANSMITTER_HUB'::device_kind
           AND store_id = :storeId
           AND status NOT IN ('DECOMMISSIONED', 'REJECTED')
           AND public_key_der IS DISTINCT FROM :publicKeyDer
@@ -36,7 +36,7 @@ interface DeviceRepository : CoroutineCrudRepository<Device, UUID> {
         """
         SELECT COUNT(*)
         FROM device
-        WHERE kind = 'TRANSMITTER_HUB'
+        WHERE kind = 'TRANSMITTER_HUB'::device_kind
           AND store_id = :storeId
           AND status NOT IN ('DECOMMISSIONED', 'REJECTED')
         """
@@ -45,4 +45,16 @@ interface DeviceRepository : CoroutineCrudRepository<Device, UUID> {
 
     @Suppress("unused")
     fun findByStoreId(storeId: UUID): Flow<Device>
+
+    @Query(
+        """
+        SELECT *
+        FROM device
+        WHERE kind = 'TRANSMITTER_HUB'::device_kind
+          AND store_id = :storeId
+          AND status = 'ACTIVE'
+        ORDER BY last_seen_at DESC NULLS LAST, id
+        """
+    )
+    fun findActiveHubsByStore(storeId: UUID): Flow<Device>
 }

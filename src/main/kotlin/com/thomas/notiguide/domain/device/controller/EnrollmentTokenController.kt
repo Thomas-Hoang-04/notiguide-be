@@ -1,6 +1,6 @@
 package com.thomas.notiguide.domain.device.controller
 
-import com.thomas.notiguide.domain.device.dto.EnrollmentTokenIssueResponse
+import com.thomas.notiguide.domain.device.response.EnrollmentTokenIssueResponse
 import com.thomas.notiguide.domain.device.dto.EnrollmentTokenMetadataDto
 import com.thomas.notiguide.domain.device.request.IssueEnrollmentTokenRequest
 import com.thomas.notiguide.domain.device.service.EnrollmentTokenService

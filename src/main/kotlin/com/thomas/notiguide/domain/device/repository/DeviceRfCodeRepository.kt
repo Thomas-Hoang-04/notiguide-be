@@ -161,6 +161,24 @@ class DeviceRfCodeRepository(
             .one()
             .awaitSingleOrNull()
 
+    suspend fun findDecryptedPayload(deviceId: UUID): DispatchRfCodeRecord? {
+        val encryptionKey = requireEncryptionKey()
+        return client.sql(
+            """
+            SELECT
+                pgp_sym_decrypt_bytea(payload, :encryptionKey) AS plaintext,
+                bits
+            FROM device_rf_code
+            WHERE device_id = :deviceId
+            """
+        )
+            .bind("deviceId", deviceId)
+            .bind("encryptionKey", encryptionKey)
+            .map(::mapDispatchPayload)
+            .one()
+            .awaitSingleOrNull()
+    }
+
     suspend fun updateAckIfVersion(
         deviceId: UUID,
         version: Int,
@@ -218,10 +236,38 @@ class DeviceRfCodeRepository(
         val ackAt: OffsetDateTime?
     )
 
+    data class DispatchRfCodeRecord(
+        val plaintext: ByteArray,
+        val bits: Int
+    ) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as DispatchRfCodeRecord
+
+            if (bits != other.bits) return false
+            if (!plaintext.contentEquals(other.plaintext)) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var result = bits
+            result = 31 * result + plaintext.contentHashCode()
+            return result
+        }
+    }
+
     private fun <T> DatabaseClient.GenericExecuteSpec.bindNullable(
         name: String,
         value: T?,
         type: Class<T>
     ): DatabaseClient.GenericExecuteSpec =
         if (value == null) bindNull(name, type) else bind(name, value)
+
+    private fun mapDispatchPayload(row: Readable): DispatchRfCodeRecord = DispatchRfCodeRecord(
+        plaintext = row.get("plaintext", ByteArray::class.java)!!,
+        bits = row.get("bits", Short::class.java)!!.toInt()
+    )
 }

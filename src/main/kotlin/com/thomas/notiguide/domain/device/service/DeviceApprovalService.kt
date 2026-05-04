@@ -8,8 +8,13 @@ import com.thomas.notiguide.core.exception.ForbiddenException
 import com.thomas.notiguide.core.exception.NotFoundException
 import com.thomas.notiguide.core.redis.RedisKeyManager
 import com.thomas.notiguide.domain.admin.types.AdminRole
+import com.thomas.notiguide.domain.device.controller.DeviceConflictEnvelopeException
+import com.thomas.notiguide.domain.device.controller.DeviceServiceUnavailableEnvelopeException
 import com.thomas.notiguide.domain.device.dto.DeviceDetailDto
 import com.thomas.notiguide.domain.device.entity.Device
+import com.thomas.notiguide.domain.device.redis.DeviceActivationByDeviceRecord
+import com.thomas.notiguide.domain.device.redis.DeviceActivationRecord
+import com.thomas.notiguide.domain.device.types.DeviceActivationStatus
 import com.thomas.notiguide.domain.device.repository.DeviceRepository
 import com.thomas.notiguide.domain.device.request.ApproveDeviceRequest
 import com.thomas.notiguide.domain.device.types.DeviceStatus

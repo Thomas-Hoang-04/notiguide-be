@@ -1,15 +1,12 @@
 package com.thomas.notiguide.domain.device.controller
 
-import com.thomas.notiguide.domain.device.service.DeviceBadRequestEnvelopeException
-import com.thomas.notiguide.domain.device.service.DeviceConflictEnvelopeException
-import com.thomas.notiguide.domain.device.service.DeviceServiceUnavailableEnvelopeException
-import com.thomas.notiguide.domain.device.service.PassiveDeviceConflictException
+import com.thomas.notiguide.domain.queue.controller.QueueAdminController
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 
-@RestControllerAdvice(assignableTypes = [DeviceAdminController::class])
+@RestControllerAdvice(assignableTypes = [DeviceAdminController::class, QueueAdminController::class])
 class DeviceControllerExceptionHandler {
 
     @ExceptionHandler(DeviceBadRequestEnvelopeException::class)

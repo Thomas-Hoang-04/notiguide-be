@@ -1,16 +1,16 @@
 package com.thomas.notiguide.domain.analytics.controller
 
 import com.thomas.notiguide.domain.admin.types.AdminRole
-import com.thomas.notiguide.domain.analytics.dto.DailyThroughputResponse
-import com.thomas.notiguide.domain.analytics.dto.HourlyHeatmapResponse
-import com.thomas.notiguide.domain.analytics.dto.OverviewRealtimeResponse
-import com.thomas.notiguide.domain.analytics.dto.OverviewResponse
-import com.thomas.notiguide.domain.analytics.dto.PeakHoursResponse
-import com.thomas.notiguide.domain.analytics.dto.Period
-import com.thomas.notiguide.domain.analytics.dto.Range
-import com.thomas.notiguide.domain.analytics.dto.RealtimeStatsResponse
-import com.thomas.notiguide.domain.analytics.dto.StoreSummaryResponse
-import com.thomas.notiguide.domain.analytics.dto.WaitDistributionResponse
+import com.thomas.notiguide.domain.analytics.response.DailyThroughputResponse
+import com.thomas.notiguide.domain.analytics.response.HourlyHeatmapResponse
+import com.thomas.notiguide.domain.analytics.response.OverviewRealtimeResponse
+import com.thomas.notiguide.domain.analytics.response.OverviewResponse
+import com.thomas.notiguide.domain.analytics.response.PeakHoursResponse
+import com.thomas.notiguide.domain.analytics.types.Period
+import com.thomas.notiguide.domain.analytics.types.Range
+import com.thomas.notiguide.domain.analytics.response.RealtimeStatsResponse
+import com.thomas.notiguide.domain.analytics.response.StoreSummaryResponse
+import com.thomas.notiguide.domain.analytics.response.WaitDistributionResponse
 import com.thomas.notiguide.domain.analytics.service.AnalyticsQueryService
 import com.thomas.notiguide.core.exception.ForbiddenException
 import com.thomas.notiguide.shared.principal.AdminPrincipal

@@ -1,5 +1,6 @@
 package com.thomas.notiguide.domain.queue.service
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.thomas.notiguide.core.exception.ConflictException
 import com.thomas.notiguide.core.exception.HttpException
 import com.thomas.notiguide.core.exception.NotFoundException
@@ -13,8 +14,14 @@ import com.thomas.notiguide.core.sse.QueueEventBroadcaster
 import com.thomas.notiguide.core.sse.QueueSseEvent
 import com.thomas.notiguide.domain.analytics.service.AnalyticsEventService
 import com.thomas.notiguide.domain.analytics.service.AnalyticsQueryService
+import com.thomas.notiguide.domain.device.redis.DeviceBusyRecord
+import com.thomas.notiguide.domain.device.dto.DeviceDispatchEvent
+import com.thomas.notiguide.domain.device.service.DeviceDispatchEventBroadcaster
+import com.thomas.notiguide.domain.device.types.DeviceDispatchEventType
+import com.thomas.notiguide.domain.device.types.DeviceDispatchStopDisposition
+import com.thomas.notiguide.domain.device.service.DeviceQueryService
 import com.thomas.notiguide.domain.queue.dto.TicketDto
-import com.thomas.notiguide.domain.queue.dto.TicketStatusResponse
+import com.thomas.notiguide.domain.queue.response.TicketStatusResponse
 import com.thomas.notiguide.domain.queue.repository.RedisCounterRepository
 import com.thomas.notiguide.domain.queue.repository.RedisQueueRepository
 import com.thomas.notiguide.domain.queue.repository.RedisTicketRepository
@@ -38,7 +45,9 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import java.time.Duration
 import java.time.Instant
-import java.util.*
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.util.UUID
 
 @Service
 class QueueService(
@@ -47,11 +56,14 @@ class QueueService(
     private val redisTicketRepository: RedisTicketRepository,
     private val redisCounterRepository: RedisCounterRepository,
     private val redis: ReactiveRedisTemplate<String, String>,
+    private val objectMapper: ObjectMapper,
     private val mqttPublisher: MqttPublisher? = null,
     private val fcmNotificationService: FcmNotificationService? = null,
     private val analyticsEventService: AnalyticsEventService? = null,
     private val analyticsQueryService: AnalyticsQueryService? = null,
     private val queueEventBroadcaster: QueueEventBroadcaster,
+    private val deviceDispatchEventBroadcaster: DeviceDispatchEventBroadcaster,
+    private val deviceQueryService: DeviceQueryService,
     private val storeSettingsRepository: StoreSettingsRepository,
     private val serviceTypeRepository: ServiceTypeRepository
 ) {
@@ -195,7 +207,11 @@ class QueueService(
         return QueueState.from(raw)
     }
 
-    suspend fun issueTicket(storeId: UUID, serviceTypeId: UUID? = null): TicketDto {
+    suspend fun issueTicket(
+        storeId: UUID,
+        serviceTypeId: UUID? = null,
+        extraFields: Map<String, String> = emptyMap()
+    ): TicketDto {
         val store = storeRepository.findById(storeId)
             ?: throw NotFoundException("Store", "id", storeId.toString())
 
@@ -248,10 +264,20 @@ class QueueService(
             .add(RedisKeyManager.queue(storeId), ticketId.toString(), now.toEpochMilli().toDouble())
             .awaitSingle()
 
-        // Store service type on ticket hash for routing
-        redis.opsForHash<String, String>()
-            .put(ticketKey, "service_type_id", resolvedServiceType.id.toString())
-            .awaitSingle()
+        try {
+            persistIssuedTicketFields(
+                ticketKey = ticketKey,
+                serviceTypeId = resolvedServiceType.id,
+                extraFields = extraFields
+            )
+        } catch (ex: Exception) {
+            rollbackIssuedTicket(
+                storeId = storeId,
+                ticketId = ticketId,
+                serviceTypeId = resolvedServiceType.id
+            )
+            throw ex
+        }
 
         log.info("Ticket issued: store={} ticket={} number={} serviceType={}", storeId, ticketId, ticketNumber, resolvedServiceType.name)
 
@@ -271,13 +297,20 @@ class QueueService(
         ))
         queueEventBroadcaster.broadcast(issuedEvent)
 
+        val (deviceId, deviceName) = resolveTicketDeviceInfo(
+            ticketData = extraFields,
+            fallbackDeviceId = extraFields["device_id"]?.let { parseUuid(it) }
+        )
+
         return TicketDto(
             id = ticketId,
             number = ticketNumber,
             status = TicketStatus.WAITING,
             issuedAt = now,
             calledAt = null,
-            position = redisQueueRepository.getQueuePosition(storeId, ticketId)?.plus(1)
+            position = redisQueueRepository.getQueuePosition(storeId, ticketId)?.plus(1),
+            deviceId = deviceId,
+            deviceName = deviceName
         )
     }
 
@@ -374,15 +407,24 @@ class QueueService(
         ))
         queueEventBroadcaster.broadcast(calledEvent)
 
-        fcmNotificationService?.sendTicketCalledNotification(
+        val usedDeviceDispatch = handleCalledTicketDispatch(
             storeId = storeId,
             ticketId = ticketId,
-            ticketNumber = ticketData["number"],
-            counterId = counterId
+            ticketData = ticketData
         )
+        if (!usedDeviceDispatch) {
+            fcmNotificationService?.sendTicketCalledNotification(
+                storeId = storeId,
+                ticketId = ticketId,
+                ticketNumber = ticketData["number"],
+                counterId = counterId
+            )
+        }
 
         setGraceExpiryIfNeeded(storeId, ticketId)
         sendProactiveAlerts(storeId)
+
+        val (deviceId, deviceName) = resolveTicketDeviceInfo(ticketData)
 
         return CallNextResult.Success(
             TicketDto(
@@ -393,7 +435,9 @@ class QueueService(
                 },
                 issuedAt = parseStoredTimestamp(ticketData["issued_at"]),
                 calledAt = parseStoredTimestamp(ticketData["called_at"]),
-                position = null
+                position = null,
+                deviceId = deviceId,
+                deviceName = deviceName
             )
         )
     }
@@ -468,15 +512,24 @@ class QueueService(
         ))
         queueEventBroadcaster.broadcast(calledEvent)
 
-        fcmNotificationService?.sendTicketCalledNotification(
+        val usedDeviceDispatch = handleCalledTicketDispatch(
             storeId = storeId,
             ticketId = ticketId,
-            ticketNumber = ticketData["number"],
-            counterId = counterId
+            ticketData = ticketData
         )
+        if (!usedDeviceDispatch) {
+            fcmNotificationService?.sendTicketCalledNotification(
+                storeId = storeId,
+                ticketId = ticketId,
+                ticketNumber = ticketData["number"],
+                counterId = counterId
+            )
+        }
 
         setGraceExpiryIfNeeded(storeId, ticketId)
         sendProactiveAlerts(storeId)
+
+        val (deviceId, deviceName) = resolveTicketDeviceInfo(ticketData)
 
         return CallNextResult.Success(
             TicketDto(
@@ -485,7 +538,9 @@ class QueueService(
                 status = TicketStatus.CALLED,
                 issuedAt = parseStoredTimestamp(ticketData["issued_at"]),
                 calledAt = parseStoredTimestamp(ticketData["called_at"]),
-                position = null
+                position = null,
+                deviceId = deviceId,
+                deviceName = deviceName
             )
         )
     }
@@ -516,8 +571,6 @@ class QueueService(
 
         log.info("Ticket served: store={} ticket={} previous_status={}", storeId, ticketId, status)
 
-        fcmNotificationService?.removeToken(storeId, ticketId)
-
         val servedEvent = QueueSseEvent(
             type = "TICKET_SERVED",
             storeId = storeId,
@@ -531,6 +584,17 @@ class QueueService(
             ticketNumber = ticket["number"]
         ))
         queueEventBroadcaster.broadcast(servedEvent)
+
+        val usedDeviceDispatch = handleTerminalDeviceDispatch(
+            storeId = storeId,
+            ticketId = ticketId,
+            ticketData = ticket,
+            previousStatus = status,
+            disposition = DeviceDispatchStopDisposition.RELEASE
+        )
+        if (!usedDeviceDispatch) {
+            fcmNotificationService?.removeToken(storeId, ticketId)
+        }
 
         redis.delete(RedisKeyManager.graceExpiry(storeId, ticketId)).awaitSingleOrNull()
     }
@@ -561,8 +625,6 @@ class QueueService(
         }
         log.info("Ticket cancelled: store={} ticket={} previous_status={}", storeId, ticketId, status)
 
-        fcmNotificationService?.removeToken(storeId, ticketId)
-
         val cancelledEvent = QueueSseEvent(
             type = "TICKET_CANCELLED",
             storeId = storeId,
@@ -576,6 +638,17 @@ class QueueService(
             ticketNumber = ticket["number"]
         ))
         queueEventBroadcaster.broadcast(cancelledEvent)
+
+        val usedDeviceDispatch = handleTerminalDeviceDispatch(
+            storeId = storeId,
+            ticketId = ticketId,
+            ticketData = ticket,
+            previousStatus = status,
+            disposition = DeviceDispatchStopDisposition.RELEASE
+        )
+        if (!usedDeviceDispatch) {
+            fcmNotificationService?.removeToken(storeId, ticketId)
+        }
 
         redis.delete(RedisKeyManager.graceExpiry(storeId, ticketId)).awaitSingleOrNull()
     }
@@ -603,13 +676,16 @@ class QueueService(
                 ?: return@mapIndexedNotNull null
             val ticket = redisTicketRepository.getTicket(storeId, ticketId)
             if (ticket.isEmpty()) return@mapIndexedNotNull null
+            val (deviceId, deviceName) = resolveTicketDeviceInfo(ticket)
             TicketDto(
                 id = ticketId,
                 number = ticket["number"] ?: "",
                 status = TicketStatus.from(ticket["status"]),
                 issuedAt = parseStoredTimestamp(ticket["issued_at"]),
                 calledAt = parseStoredTimestamp(ticket["called_at"]),
-                position = (index + 1).toLong()
+                position = (index + 1).toLong(),
+                deviceId = deviceId,
+                deviceName = deviceName
             )
         }
     }
@@ -668,6 +744,7 @@ class QueueService(
             throw NotFoundException("Ticket", "id", ticketId.toString())
 
         val position = redisQueueRepository.getQueuePosition(storeId, ticketId)?.plus(1)
+        val (deviceId, deviceName) = resolveTicketDeviceInfo(ticket)
 
         return TicketDto(
             id = ticketId,
@@ -675,7 +752,9 @@ class QueueService(
             status = TicketStatus.from(ticket["status"]),
             issuedAt = parseStoredTimestamp(ticket["issued_at"]),
             calledAt = parseStoredTimestamp(ticket["called_at"]),
-            position = position
+            position = position,
+            deviceId = deviceId,
+            deviceName = deviceName
         )
     }
 
@@ -729,15 +808,31 @@ class QueueService(
                 type = "TICKET_REQUEUED", storeId = storeId, ticketId = ticketId,
                 ticketNumber = ticketData["number"]
             ))
+
+            handleNoShowDeviceDispatch(
+                storeId = storeId,
+                ticketId = ticketId,
+                ticketData = ticketData,
+                disposition = DeviceDispatchStopDisposition.REQUEUE
+            )
         } else {
             redisQueueRepository.removeFromServing(storeId, ticketId)
             redisTicketRepository.markSkipped(storeId, ticketId)
-            fcmNotificationService?.removeToken(storeId, ticketId)
 
             queueEventBroadcaster.broadcast(QueueSseEvent(
                 type = "TICKET_SKIPPED", storeId = storeId, ticketId = ticketId,
                 ticketNumber = ticketData["number"]
             ))
+
+            val usedDeviceDispatch = handleNoShowDeviceDispatch(
+                storeId = storeId,
+                ticketId = ticketId,
+                ticketData = ticketData,
+                disposition = DeviceDispatchStopDisposition.RELEASE
+            )
+            if (!usedDeviceDispatch) {
+                fcmNotificationService?.removeToken(storeId, ticketId)
+            }
 
             analyticsEventService?.recordTicketSkipped(
                 storeId, ticketId, ticketData["number"] ?: "",
@@ -796,6 +891,158 @@ class QueueService(
             ticketNumber = ticketData["number"]
         ))
     }
+
+    private suspend fun persistIssuedTicketFields(
+        ticketKey: String,
+        serviceTypeId: UUID,
+        extraFields: Map<String, String>
+    ) {
+        val hashOps = redis.opsForHash<String, String>()
+        hashOps.put(ticketKey, "service_type_id", serviceTypeId.toString()).awaitSingle()
+        for ((field, value) in extraFields) {
+            hashOps.put(ticketKey, field, value).awaitSingle()
+        }
+    }
+
+    private suspend fun rollbackIssuedTicket(
+        storeId: UUID,
+        ticketId: UUID,
+        serviceTypeId: UUID
+    ) {
+        redisQueueRepository.removeFromQueue(storeId, ticketId)
+        redis.opsForZSet().remove(RedisKeyManager.queue(storeId, serviceTypeId), ticketId.toString()).awaitSingleOrNull()
+        redis.delete(RedisKeyManager.ticket(storeId, ticketId)).awaitSingleOrNull()
+    }
+
+    private suspend fun handleCalledTicketDispatch(
+        storeId: UUID,
+        ticketId: UUID,
+        ticketData: Map<String, String>
+    ): Boolean {
+        val deviceId = parseUuid(ticketData["device_id"]) ?: return false
+        storeBusyTicketBinding(
+            storeId = storeId,
+            ticketId = ticketId,
+            deviceId = deviceId,
+            ttl = RedisTTLPolicy.TICKET_CALLED
+        )
+        emitDeviceDispatchEvent(
+            type = DeviceDispatchEventType.DEVICE_CALL_REQUESTED,
+            storeId = storeId,
+            ticketId = ticketId,
+            ticketNumber = ticketData["number"],
+            deviceId = deviceId
+        )
+        return true
+    }
+
+    private suspend fun handleTerminalDeviceDispatch(
+        storeId: UUID,
+        ticketId: UUID,
+        ticketData: Map<String, String>,
+        previousStatus: TicketStatus,
+        disposition: DeviceDispatchStopDisposition
+    ): Boolean {
+        val deviceId = parseUuid(ticketData["device_id"]) ?: return false
+        if (previousStatus != TicketStatus.CALLED) {
+            redis.delete(RedisKeyManager.deviceBusy(deviceId)).awaitSingleOrNull()
+            return true
+        }
+
+        storeBusyTicketBinding(
+            storeId = storeId,
+            ticketId = ticketId,
+            deviceId = deviceId,
+            ttl = RedisTTLPolicy.TICKET_TERMINAL
+        )
+        emitDeviceDispatchEvent(
+            type = DeviceDispatchEventType.DEVICE_STOP_REQUESTED,
+            storeId = storeId,
+            ticketId = ticketId,
+            ticketNumber = ticketData["number"],
+            deviceId = deviceId,
+            disposition = disposition
+        )
+        return true
+    }
+
+    private suspend fun handleNoShowDeviceDispatch(
+        storeId: UUID,
+        ticketId: UUID,
+        ticketData: Map<String, String>,
+        disposition: DeviceDispatchStopDisposition
+    ): Boolean {
+        val deviceId = parseUuid(ticketData["device_id"]) ?: return false
+        val ttl = when (disposition) {
+            DeviceDispatchStopDisposition.RELEASE -> RedisTTLPolicy.TICKET_TERMINAL
+            DeviceDispatchStopDisposition.REQUEUE -> RedisTTLPolicy.TICKET_WAITING
+        }
+        storeBusyTicketBinding(
+            storeId = storeId,
+            ticketId = ticketId,
+            deviceId = deviceId,
+            ttl = ttl
+        )
+        emitDeviceDispatchEvent(
+            type = DeviceDispatchEventType.DEVICE_STOP_REQUESTED,
+            storeId = storeId,
+            ticketId = ticketId,
+            ticketNumber = ticketData["number"],
+            deviceId = deviceId,
+            disposition = disposition
+        )
+        return true
+    }
+
+    private suspend fun storeBusyTicketBinding(
+        storeId: UUID,
+        ticketId: UUID,
+        deviceId: UUID,
+        ttl: Duration
+    ) {
+        val payload = objectMapper.writeValueAsString(
+            DeviceBusyRecord(
+                storeId = storeId,
+                ticketId = ticketId,
+                boundAt = OffsetDateTime.now(ZoneOffset.UTC)
+            )
+        )
+        redis.opsForValue()
+            .set(RedisKeyManager.deviceBusy(deviceId), payload, ttl)
+            .awaitSingle()
+    }
+
+    private fun emitDeviceDispatchEvent(
+        type: DeviceDispatchEventType,
+        storeId: UUID,
+        ticketId: UUID,
+        ticketNumber: String?,
+        deviceId: UUID,
+        disposition: DeviceDispatchStopDisposition? = null
+    ) {
+        deviceDispatchEventBroadcaster.broadcast(
+            DeviceDispatchEvent(
+                type = type,
+                storeId = storeId,
+                ticketId = ticketId,
+                ticketNumber = ticketNumber,
+                deviceId = deviceId,
+                disposition = disposition
+            )
+        )
+    }
+
+    private suspend fun resolveTicketDeviceInfo(
+        ticketData: Map<String, String>,
+        fallbackDeviceId: UUID? = parseUuid(ticketData["device_id"])
+    ): Pair<UUID?, String?> {
+        val deviceId = fallbackDeviceId ?: return null to null
+        val device = deviceQueryService.findDeviceById(deviceId)
+        return deviceId to device?.assignedName
+    }
+
+    private fun parseUuid(raw: String?): UUID? =
+        raw?.let { value -> runCatching { UUID.fromString(value) }.getOrNull() }
 
     private suspend fun setGraceExpiryIfNeeded(storeId: UUID, ticketId: UUID) {
         val settings = findApplicableNoShowSettings(storeId) ?: return

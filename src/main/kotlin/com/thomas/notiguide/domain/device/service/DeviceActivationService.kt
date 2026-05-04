@@ -8,6 +8,8 @@ import com.thomas.notiguide.core.device.DevicePublicIdMinter
 import com.thomas.notiguide.core.mqtt.MqttClientManager
 import com.thomas.notiguide.core.redis.RedisKeyManager
 import com.thomas.notiguide.domain.device.entity.Device
+import com.thomas.notiguide.domain.device.redis.DeviceActivationRecord
+import com.thomas.notiguide.domain.device.types.DeviceActivationStatus
 import com.thomas.notiguide.domain.device.repository.DeviceRepository
 import com.thomas.notiguide.domain.device.types.DeviceStatus
 import kotlinx.coroutines.reactor.awaitSingleOrNull

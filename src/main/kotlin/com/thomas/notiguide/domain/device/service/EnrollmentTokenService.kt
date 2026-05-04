@@ -7,7 +7,7 @@ import com.thomas.notiguide.core.exception.NotFoundException
 import com.thomas.notiguide.core.jwt.TokenHashUtil
 import com.thomas.notiguide.core.redis.RedisKeyManager
 import com.thomas.notiguide.domain.admin.types.AdminRole
-import com.thomas.notiguide.domain.device.dto.EnrollmentTokenIssueResponse
+import com.thomas.notiguide.domain.device.response.EnrollmentTokenIssueResponse
 import com.thomas.notiguide.domain.device.dto.EnrollmentTokenMetadataDto
 import com.thomas.notiguide.domain.device.request.IssueEnrollmentTokenRequest
 import com.thomas.notiguide.domain.store.repository.StoreRepository

@@ -10,24 +10,8 @@ data class TicketDto(
     val status: TicketStatus,
     val issuedAt: Instant?,
     val calledAt: Instant?,
-    val position: Long?
+    val position: Long?,
+    val deviceId: UUID? = null,
+    val deviceName: String? = null
 )
 
-data class IssueTicketResponse(
-    val storeId: String,
-    val ticket: TicketDto
-)
-
-data class TicketStatusResponse(
-    val status: TicketStatus,
-    val positionInQueue: Long?,
-    val estimatedWaitTime: Long? = null
-)
-
-data class NextTicketResponse(
-    val ticket: TicketDto?
-)
-
-data class QueueSizeResponse(
-    val queueSize: Long
-)

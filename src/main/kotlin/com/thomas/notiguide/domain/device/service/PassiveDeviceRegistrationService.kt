@@ -2,6 +2,8 @@ package com.thomas.notiguide.domain.device.service
 
 import com.thomas.notiguide.core.device.DevicePublicIdMinter
 import com.thomas.notiguide.core.exception.NotFoundException
+import com.thomas.notiguide.domain.device.controller.DeviceBadRequestEnvelopeException
+import com.thomas.notiguide.domain.device.controller.PassiveDeviceConflictException
 import com.thomas.notiguide.domain.device.dto.DeviceDto
 import com.thomas.notiguide.domain.device.entity.Device
 import com.thomas.notiguide.domain.device.repository.DeviceRepository

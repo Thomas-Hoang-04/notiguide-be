@@ -9,7 +9,3 @@ data class LoginHistoryDto(
     val createdAt: OffsetDateTime?
 )
 
-data class LoginHistoryPageResponse(
-    val items: List<LoginHistoryDto>,
-    val hasMore: Boolean
-)

@@ -7,6 +7,9 @@ import com.thomas.notiguide.core.device.DeviceTransmitterProperties
 import com.thomas.notiguide.core.mqtt.MqttClientManager
 import com.thomas.notiguide.core.redis.RedisKeyManager
 import com.thomas.notiguide.domain.device.entity.Device
+import com.thomas.notiguide.domain.device.redis.DeviceActivationByDeviceRecord
+import com.thomas.notiguide.domain.device.redis.DeviceActivationRecord
+import com.thomas.notiguide.domain.device.types.DeviceActivationStatus
 import com.thomas.notiguide.domain.device.repository.DeviceRepository
 import com.thomas.notiguide.domain.device.repository.DeviceRfCodeRepository
 import com.thomas.notiguide.domain.device.types.DeviceFamily

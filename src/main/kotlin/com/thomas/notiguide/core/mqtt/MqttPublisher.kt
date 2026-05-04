@@ -36,6 +36,7 @@ class MqttPublisher(
         TICKET_ISSUED,
         TICKET_CALLED,
         TICKET_SERVED,
-        TICKET_CANCELLED
+        TICKET_CANCELLED,
+        DEVICE_DISPATCH_FAILED
     }
 }
