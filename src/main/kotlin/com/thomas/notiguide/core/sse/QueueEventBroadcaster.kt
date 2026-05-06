@@ -20,6 +20,7 @@ data class QueueSseEvent(
     val ticketId: UUID,
     val ticketNumber: String? = null,
     val counterId: String? = null,
+    val reason: String? = null,
     val timestamp: Long = System.currentTimeMillis()
 )
 

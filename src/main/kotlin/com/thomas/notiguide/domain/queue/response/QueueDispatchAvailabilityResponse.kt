@@ -5,5 +5,6 @@ import com.thomas.notiguide.domain.device.dto.DeviceDto
 data class QueueDispatchAvailabilityResponse(
     val devices: List<DeviceDto>,
     val dispatchReady: Boolean,
-    val error: String? = null
+    val error: String? = null,
+    val maxHubsPerStore: Int? = null
 )

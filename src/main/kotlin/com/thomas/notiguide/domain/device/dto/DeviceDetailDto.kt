@@ -21,5 +21,7 @@ data class DeviceDetailDto(
     val createdAt: OffsetDateTime?,
     val updatedAt: OffsetDateTime?,
     val rfCode: DeviceRfCodeSummaryDto? = null,
-    val lifecycleCommand: DeviceLifecycleCommandDto? = null
+    val lifecycleCommand: DeviceLifecycleCommandDto? = null,
+    val isElected: Boolean? = null,
+    val boundTicket: BoundTicketDto? = null
 )

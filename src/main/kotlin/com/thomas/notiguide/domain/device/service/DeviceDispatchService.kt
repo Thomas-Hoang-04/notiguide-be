@@ -1,6 +1,7 @@
 package com.thomas.notiguide.domain.device.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.thomas.notiguide.core.device.DeviceTransmitterProperties
 import com.thomas.notiguide.core.redis.RedisKeyManager
 import com.thomas.notiguide.core.redis.RedisTTLPolicy
 import com.thomas.notiguide.domain.device.controller.DeviceConflictEnvelopeException
@@ -26,7 +27,8 @@ class DeviceDispatchService(
     private val queueService: QueueService,
     private val redis: ReactiveRedisTemplate<String, String>,
     private val objectMapper: ObjectMapper,
-    private val transmitterElectionServiceProvider: ObjectProvider<TransmitterElectionService>
+    private val transmitterElectionServiceProvider: ObjectProvider<TransmitterElectionService>,
+    private val transmitterPropertiesProvider: ObjectProvider<DeviceTransmitterProperties>
 ) {
 
     private val log = LoggerFactory.getLogger(this::class.java)
@@ -96,7 +98,8 @@ class DeviceDispatchService(
         return QueueDispatchAvailabilityResponse(
             devices = devices,
             dispatchReady = dispatchReady,
-            error = if (dispatchReady) null else "no_active_transmitter"
+            error = if (dispatchReady) null else "no_active_transmitter",
+            maxHubsPerStore = transmitterPropertiesProvider.ifAvailable?.maxRegisteredPerStore
         )
     }
 

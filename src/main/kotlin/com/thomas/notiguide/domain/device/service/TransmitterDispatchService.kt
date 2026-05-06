@@ -77,7 +77,7 @@ class TransmitterDispatchService(
                 event.ticketId,
                 event.deviceId
             )
-            emitDispatchFailed(event)
+            emitDispatchFailed(event, "no_active_transmitter")
             return
         }
 
@@ -91,7 +91,7 @@ class TransmitterDispatchService(
                 event.deviceId,
                 hub.id
             )
-            emitDispatchFailed(event)
+            emitDispatchFailed(event, "device_not_found")
             return
         }
 
@@ -107,7 +107,7 @@ class TransmitterDispatchService(
                 event.deviceId,
                 it
             )
-            emitDispatchFailed(event)
+            emitDispatchFailed(event, "rf_code_error")
             return
         }
 
@@ -121,7 +121,7 @@ class TransmitterDispatchService(
                 publisher != null,
                 decrypted != null
             )
-            emitDispatchFailed(event)
+            emitDispatchFailed(event, "infrastructure_unavailable")
             return
         }
 
@@ -146,7 +146,7 @@ class TransmitterDispatchService(
                 event.deviceId,
                 it
             )
-            emitDispatchFailed(event)
+            emitDispatchFailed(event, "payload_error")
             return
         }
 
@@ -161,7 +161,7 @@ class TransmitterDispatchService(
                 dispatchId,
                 ex
             )
-            emitDispatchFailed(event)
+            emitDispatchFailed(event, "publish_failed")
             return
         }
 
@@ -182,7 +182,7 @@ class TransmitterDispatchService(
         }
     }
 
-    private suspend fun emitDispatchFailed(event: DeviceDispatchEvent) {
+    private suspend fun emitDispatchFailed(event: DeviceDispatchEvent, reason: String) {
         runCatching {
             mqttPublisher?.publishQueueEvent(
                 event.storeId,
@@ -206,7 +206,8 @@ class TransmitterDispatchService(
                 type = QueueEventType.DEVICE_DISPATCH_FAILED.name,
                 storeId = event.storeId,
                 ticketId = event.ticketId,
-                ticketNumber = event.ticketNumber
+                ticketNumber = event.ticketNumber,
+                reason = reason
             )
         )
     }

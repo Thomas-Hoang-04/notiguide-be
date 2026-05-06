@@ -2,12 +2,15 @@ package com.thomas.notiguide.domain.device.service
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.thomas.notiguide.core.redis.RedisKeyManager
+import com.thomas.notiguide.domain.device.dto.BoundTicketDto
 import com.thomas.notiguide.domain.device.dto.DeviceDetailDto
 import com.thomas.notiguide.domain.device.dto.DeviceDto
 import com.thomas.notiguide.domain.device.dto.DeviceLifecycleCommandDto
 import com.thomas.notiguide.domain.device.response.DeviceListResponse
 import com.thomas.notiguide.domain.device.dto.DeviceRfCodeSummaryDto
+import com.thomas.notiguide.domain.device.redis.DeviceBusyRecord
 import com.thomas.notiguide.domain.device.redis.DeviceLifecycleCommandRecord
+import com.thomas.notiguide.domain.device.redis.TransmitterActiveRecord
 import com.thomas.notiguide.domain.device.types.DeviceHardwareModel
 import com.thomas.notiguide.domain.device.types.DeviceKind
 import com.thomas.notiguide.domain.device.types.DeviceRfAckStatus
@@ -97,7 +100,53 @@ class DeviceQueryService(
 
     suspend fun findDeviceDetailById(deviceId: UUID): DeviceDetailDto? {
         val device = findDeviceById(deviceId) ?: return null
-        return device.toDetail(loadLifecycleCommand(deviceId))
+        val lifecycle = loadLifecycleCommand(deviceId)
+        val isElected = if (device.kind.isHub() && device.storeId != null) {
+            loadElectedHubId(device.storeId) == deviceId
+        } else null
+        val boundTicket = if (!device.kind.isHub()) {
+            loadBoundTicket(deviceId, device.storeId)
+        } else null
+        return device.toDetail(lifecycle, isElected, boundTicket)
+    }
+
+    private suspend fun loadElectedHubId(storeId: UUID): UUID? {
+        val payload = runCatching {
+            redis.opsForValue()
+                .get(RedisKeyManager.storeTransmitterActive(storeId))
+                .awaitSingleOrNull()
+        }.getOrNull() ?: return null
+        return runCatching {
+            objectMapper.readValue(payload, TransmitterActiveRecord::class.java).deviceId
+        }.getOrNull()
+    }
+
+    private suspend fun loadBoundTicket(deviceId: UUID, storeId: UUID?): BoundTicketDto? {
+        if (storeId == null) return null
+        val busyPayload = runCatching {
+            redis.opsForValue()
+                .get(RedisKeyManager.deviceBusy(deviceId))
+                .awaitSingleOrNull()
+        }.getOrNull() ?: return null
+        val busy = runCatching {
+            objectMapper.readValue(busyPayload, DeviceBusyRecord::class.java)
+        }.getOrNull() ?: return null
+        if (busy.ticketId == UUID(0L, 0L)) return null
+
+        val ticketPayload = runCatching {
+            redis.opsForHash<String, String>()
+                .entries(RedisKeyManager.ticket(storeId, busy.ticketId))
+                .collectList()
+                .awaitSingleOrNull()
+        }.getOrNull()?.associate { it.key to it.value } ?: return null
+
+        val number = ticketPayload["number"] ?: return null
+        val status = ticketPayload["status"] ?: "UNKNOWN"
+        return BoundTicketDto(
+            ticketId = busy.ticketId,
+            ticketNumber = number,
+            status = status
+        )
     }
 
     suspend fun findDeviceById(deviceId: UUID): DeviceDto? =
@@ -185,7 +234,11 @@ class DeviceQueryService(
     )
 }
 
-private fun DeviceDto.toDetail(lifecycleCommand: DeviceLifecycleCommandDto?): DeviceDetailDto =
+private fun DeviceDto.toDetail(
+    lifecycleCommand: DeviceLifecycleCommandDto?,
+    isElected: Boolean? = null,
+    boundTicket: BoundTicketDto? = null
+): DeviceDetailDto =
     DeviceDetailDto(
         id = id,
         publicId = publicId,
@@ -201,7 +254,9 @@ private fun DeviceDto.toDetail(lifecycleCommand: DeviceLifecycleCommandDto?): De
         createdAt = createdAt,
         updatedAt = updatedAt,
         rfCode = rfCode,
-        lifecycleCommand = lifecycleCommand
+        lifecycleCommand = lifecycleCommand,
+        isElected = isElected,
+        boundTicket = boundTicket
     )
 
 private data class DeviceRow(
