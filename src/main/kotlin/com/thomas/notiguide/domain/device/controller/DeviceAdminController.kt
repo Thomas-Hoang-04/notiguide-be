@@ -9,13 +9,16 @@ import com.thomas.notiguide.domain.device.request.ApproveDeviceRequest
 import com.thomas.notiguide.domain.device.request.DeviceLifecycleRequest
 import com.thomas.notiguide.domain.device.request.PassiveDeviceRegistrationRequest
 import com.thomas.notiguide.domain.device.request.RotateRfCodeRequest
+import com.thomas.notiguide.domain.device.request.DeviceDiagnosticsRelayRequest
 import com.thomas.notiguide.domain.device.request.UsbDispatchPayloadRequest
+import com.thomas.notiguide.domain.device.response.HubHealthSummaryResponse
 import com.thomas.notiguide.domain.device.response.UsbDispatchPayloadResponse
 import com.thomas.notiguide.domain.device.service.DeviceApprovalService
 import com.thomas.notiguide.domain.device.service.DeviceLifecycleService
 import com.thomas.notiguide.domain.device.service.DeviceQueryService
 import com.thomas.notiguide.domain.device.service.PassiveDeviceRegistrationService
 import com.thomas.notiguide.domain.device.service.RfCodeService
+import com.thomas.notiguide.domain.device.service.HubDiagnosticsService
 import com.thomas.notiguide.domain.device.service.UsbDispatchPayloadService
 import com.thomas.notiguide.domain.device.types.DeviceKind
 import com.thomas.notiguide.shared.principal.AdminPrincipal
@@ -41,7 +44,8 @@ class DeviceAdminController(
     private val deviceApprovalService: DeviceApprovalService,
     private val rfCodeService: RfCodeService,
     private val deviceLifecycleService: DeviceLifecycleService,
-    private val usbDispatchPayloadService: UsbDispatchPayloadService
+    private val usbDispatchPayloadService: UsbDispatchPayloadService,
+    private val hubDiagnosticsService: HubDiagnosticsService
 ) {
 
     @GetMapping
@@ -132,6 +136,36 @@ class DeviceAdminController(
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<UsbDispatchPayloadResponse> =
         ResponseEntity.ok(usbDispatchPayloadService.preparePayload(request, principal))
+
+    @PostMapping("/{id}/diagnostics")
+    suspend fun relayDiagnostics(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: DeviceDiagnosticsRelayRequest,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<Void> {
+        val device = deviceQueryService.getRequiredDeviceDetailById(id)
+        val storeId = device.storeId
+        if (storeId == null && !isSuperAdmin(principal)) {
+            throw ForbiddenException("Store-scoped admins need an assigned store to relay diagnostics")
+        }
+        if (storeId != null) {
+            StoreAccessUtil.requireStoreAccess(principal, storeId)
+        }
+        hubDiagnosticsService.relayUsbDiagnostics(device, request)
+        return ResponseEntity.noContent().build()
+    }
+
+    @GetMapping("/hub-health")
+    suspend fun getHubHealth(
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<HubHealthSummaryResponse> {
+        val effectiveStoreId = when {
+            isSuperAdmin(principal) -> null
+            else -> principal.storeId
+                ?: throw ForbiddenException("Store-scoped admins need an assigned store to view hub health")
+        }
+        return ResponseEntity.ok(hubDiagnosticsService.getHubHealthSummary(effectiveStoreId))
+    }
 
     private fun isSuperAdmin(principal: AdminPrincipal): Boolean =
         principal.authorities.any { it.authority == AdminRole.ROLE_SUPER_ADMIN.name }

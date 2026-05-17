@@ -21,10 +21,10 @@ data class DeviceCommandSigningProperties(
         val pt2272DetoggleChannel: Int = 1
     ) {
         init {
-            require(defaultBits433m in 1..32) { "device.rf-code.default-bits-433m must be between 1 and 32" }
-            require(defaultBits24g == 40) { "device.rf-code.default-bits-24g must be exactly 40" }
-            require(pt2272ToggleChannel in 0..0xFF) { "device.rf-code.pt2272-toggle-channel must be a single byte" }
-            require(pt2272DetoggleChannel in 0..0xFF) { "device.rf-code.pt2272-detoggle-channel must be a single byte" }
+            require(defaultBits433m in 1..32) { "433MHz band default bit count must be between 1 and 32" }
+            require(defaultBits24g == 40) { "2.4GHz band default bit count must be exactly 40" }
+            require(pt2272ToggleChannel in 0..0xFF) { "Passive RF receiver toggle channel must be a single byte" }
+            require(pt2272DetoggleChannel in 0..0xFF) { "Passive RF receiver toggle channel must be a single byte" }
         }
     }
 
@@ -32,7 +32,7 @@ data class DeviceCommandSigningProperties(
         val tokenTtlSeconds: Long = 3600
     ) {
         init {
-            require(tokenTtlSeconds > 0) { "device.enrollment.token-ttl-seconds must be positive" }
+            require(tokenTtlSeconds > 0) { "Token TTL must be positive" }
         }
     }
 }

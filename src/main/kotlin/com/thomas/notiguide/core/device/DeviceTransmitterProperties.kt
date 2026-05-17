@@ -8,12 +8,14 @@ data class DeviceTransmitterProperties(
     val heartbeatIntervalSeconds: Long = 10,
     val heartbeatLivenessSeconds: Long = 30,
     val activeCacheSeconds: Long = 60,
-    val maxRegisteredPerStore: Int = 3
+    val maxRegisteredPerStore: Int = 3,
+    val diagnosticsCacheSeconds: Long = 45
 ) {
     init {
-        require(heartbeatIntervalSeconds > 0) { "device.transmitter.heartbeat-interval-seconds must be positive" }
-        require(heartbeatLivenessSeconds > 0) { "device.transmitter.heartbeat-liveness-seconds must be positive" }
-        require(activeCacheSeconds > 0) { "device.transmitter.active-cache-seconds must be positive" }
-        require(maxRegisteredPerStore > 0) { "device.transmitter.max-registered-per-store must be positive" }
+        require(heartbeatIntervalSeconds > 0) { "Heartbeat intervals must be positive" }
+        require(heartbeatLivenessSeconds > 0) { "Heartbeat keep-alive period must be positive" }
+        require(activeCacheSeconds > 0) { "Cache TTL must be positive" }
+        require(maxRegisteredPerStore > 0) { "Max active transmitter count must be positive" }
+        require(diagnosticsCacheSeconds > heartbeatIntervalSeconds) { "Diagnostic cache must exceed heartbeat interval" }
     }
 }

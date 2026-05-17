@@ -8,6 +8,7 @@ import com.thomas.notiguide.core.mqtt.MqttMessageHandler
 import com.thomas.notiguide.core.mqtt.MqttProperties
 import com.thomas.notiguide.core.redis.RedisKeyManager
 import com.thomas.notiguide.domain.device.service.DeviceLifecycleService
+import com.thomas.notiguide.domain.device.service.HubDiagnosticsService
 import io.r2dbc.spi.Readable
 import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.CoroutineScope
@@ -39,7 +40,8 @@ class TransmitterOperationalListener(
     private val client: DatabaseClient,
     private val redis: ReactiveRedisTemplate<String, String>,
     private val properties: DeviceTransmitterProperties,
-    private val deviceLifecycleService: DeviceLifecycleService
+    private val deviceLifecycleService: DeviceLifecycleService,
+    private val hubDiagnosticsService: HubDiagnosticsService
 ) : SmartInitializingSingleton {
 
     private val log = LoggerFactory.getLogger(this::class.java)
@@ -105,6 +107,19 @@ class TransmitterOperationalListener(
                 Duration.ofSeconds(properties.heartbeatLivenessSeconds)
             )
             .awaitSingle()
+
+        heartbeat.diag?.let { diag ->
+            hubDiagnosticsService.recordMqttDiagnostics(
+                deviceId = touched.deviceId,
+                freeHeapPct = diag.freeHeapPct,
+                rssi = diag.rssi,
+                uptimeMs = diag.uptimeMs,
+                dispatchDaily = diag.dispatchDaily,
+                dispatchTotal = diag.dispatchTotal,
+                ip = diag.ip,
+                seenAt = seenAt
+            )
+        }
     }
 
     private suspend fun handleAck(publicId: String, payload: String) {
@@ -168,7 +183,21 @@ private data class TransmitterHeartbeatEnvelope(
     @field:JsonProperty("schema_version")
     val schemaVersion: Int = 0,
     @field:JsonProperty("issued_at")
-    val issuedAt: OffsetDateTime? = null
+    val issuedAt: OffsetDateTime? = null,
+    val diag: HeartbeatDiagPayload? = null
+)
+
+private data class HeartbeatDiagPayload(
+    @field:JsonProperty("heap_pct")
+    val freeHeapPct: Int = 0,
+    val rssi: Int? = null,
+    @field:JsonProperty("uptime_ms")
+    val uptimeMs: Long = 0,
+    @field:JsonProperty("disp_d")
+    val dispatchDaily: Int = 0,
+    @field:JsonProperty("disp_t")
+    val dispatchTotal: Int = 0,
+    val ip: String? = null
 )
 
 private data class TransmitterAckEnvelope(

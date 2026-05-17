@@ -6,6 +6,7 @@ import com.thomas.notiguide.domain.device.dto.BoundTicketDto
 import com.thomas.notiguide.domain.device.dto.DeviceDetailDto
 import com.thomas.notiguide.domain.device.dto.DeviceDto
 import com.thomas.notiguide.domain.device.dto.DeviceLifecycleCommandDto
+import com.thomas.notiguide.domain.device.dto.HubDiagnosticsDto
 import com.thomas.notiguide.domain.device.response.DeviceListResponse
 import com.thomas.notiguide.domain.device.dto.DeviceRfCodeSummaryDto
 import com.thomas.notiguide.domain.device.redis.DeviceBusyRecord
@@ -29,7 +30,8 @@ import java.util.UUID
 class DeviceQueryService(
     private val client: DatabaseClient,
     private val redis: ReactiveRedisTemplate<String, String>,
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
+    private val hubDiagnosticsService: HubDiagnosticsService
 ) {
 
     suspend fun listDevices(
@@ -107,7 +109,10 @@ class DeviceQueryService(
         val boundTicket = if (!device.kind.isHub()) {
             loadBoundTicket(deviceId, device.storeId)
         } else null
-        return device.toDetail(lifecycle, isElected, boundTicket)
+        val diagnostics = if (device.kind.isHub()) {
+            hubDiagnosticsService.loadDiagnostics(deviceId)
+        } else null
+        return device.toDetail(lifecycle, isElected, boundTicket, diagnostics)
     }
 
     private suspend fun loadElectedHubId(storeId: UUID): UUID? {
@@ -237,7 +242,8 @@ class DeviceQueryService(
 private fun DeviceDto.toDetail(
     lifecycleCommand: DeviceLifecycleCommandDto?,
     isElected: Boolean? = null,
-    boundTicket: BoundTicketDto? = null
+    boundTicket: BoundTicketDto? = null,
+    diagnostics: HubDiagnosticsDto? = null
 ): DeviceDetailDto =
     DeviceDetailDto(
         id = id,
@@ -256,7 +262,8 @@ private fun DeviceDto.toDetail(
         rfCode = rfCode,
         lifecycleCommand = lifecycleCommand,
         isElected = isElected,
-        boundTicket = boundTicket
+        boundTicket = boundTicket,
+        diagnostics = diagnostics
     )
 
 private data class DeviceRow(

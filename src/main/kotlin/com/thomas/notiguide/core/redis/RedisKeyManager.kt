@@ -26,6 +26,7 @@ object RedisKeyManager {
     fun deviceLifecycleCommand(deviceId: UUID) = "device:lifecycle:$deviceId"
     fun deviceBusy(deviceId: UUID) = "device:busy:$deviceId"
     fun deviceHubAlive(deviceId: UUID) = "device:hub:alive:$deviceId"
+    fun deviceHubDiagnostics(deviceId: UUID) = "device:hub:diag:$deviceId"
     fun storeTransmitterActive(storeId: UUID) = "store:$storeId:transmitter:active"
 
     fun queueState(storeId: UUID) = "store:$storeId:queue_state"
