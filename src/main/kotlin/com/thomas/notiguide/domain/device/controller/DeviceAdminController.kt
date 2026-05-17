@@ -9,11 +9,14 @@ import com.thomas.notiguide.domain.device.request.ApproveDeviceRequest
 import com.thomas.notiguide.domain.device.request.DeviceLifecycleRequest
 import com.thomas.notiguide.domain.device.request.PassiveDeviceRegistrationRequest
 import com.thomas.notiguide.domain.device.request.RotateRfCodeRequest
+import com.thomas.notiguide.domain.device.request.UsbDispatchPayloadRequest
+import com.thomas.notiguide.domain.device.response.UsbDispatchPayloadResponse
 import com.thomas.notiguide.domain.device.service.DeviceApprovalService
 import com.thomas.notiguide.domain.device.service.DeviceLifecycleService
 import com.thomas.notiguide.domain.device.service.DeviceQueryService
 import com.thomas.notiguide.domain.device.service.PassiveDeviceRegistrationService
 import com.thomas.notiguide.domain.device.service.RfCodeService
+import com.thomas.notiguide.domain.device.service.UsbDispatchPayloadService
 import com.thomas.notiguide.domain.device.types.DeviceKind
 import com.thomas.notiguide.shared.principal.AdminPrincipal
 import com.thomas.notiguide.shared.principal.StoreAccessUtil
@@ -37,7 +40,8 @@ class DeviceAdminController(
     private val passiveDeviceRegistrationService: PassiveDeviceRegistrationService,
     private val deviceApprovalService: DeviceApprovalService,
     private val rfCodeService: RfCodeService,
-    private val deviceLifecycleService: DeviceLifecycleService
+    private val deviceLifecycleService: DeviceLifecycleService,
+    private val usbDispatchPayloadService: UsbDispatchPayloadService
 ) {
 
     @GetMapping
@@ -121,6 +125,13 @@ class DeviceAdminController(
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<DeviceDetailDto> =
         ResponseEntity.ok(deviceLifecycleService.reprovision(id, principal))
+
+    @PostMapping("/usb-dispatch-payload")
+    suspend fun prepareUsbDispatchPayload(
+        @Valid @RequestBody request: UsbDispatchPayloadRequest,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<UsbDispatchPayloadResponse> =
+        ResponseEntity.ok(usbDispatchPayloadService.preparePayload(request, principal))
 
     private fun isSuperAdmin(principal: AdminPrincipal): Boolean =
         principal.authorities.any { it.authority == AdminRole.ROLE_SUPER_ADMIN.name }
