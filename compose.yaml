@@ -44,6 +44,10 @@ services:
       MQTT_CLIENT_ID: ${MQTT_CLIENT_ID}
       MQTT_USERNAME: ${MQTT_USERNAME}
       MQTT_PASSWORD: ${MQTT_PASSWORD}
+      DEVICE_CMD_SIGNING_PK: file:/app/rsa/notiguide-sign.pem
+      DEVICE_RF_CODE_ENCRYPTION_KEY: ${DEVICE_RF_CODE_ENCRYPTION_KEY}
+      DEVICE_ENROLLMENT_TTL_SECONDS: 300
+      DEVICE_TRANSMITTER_ENABLED: true
 
     volumes:
       - ./firebase/notiguide-firebase.json:/app/config/notiguide-firebase.json:ro

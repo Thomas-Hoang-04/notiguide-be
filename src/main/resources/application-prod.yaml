@@ -44,3 +44,11 @@ rate-limit:
   standard:
     window-seconds: 60
     max-requests: 60
+
+device:
+  command-signing:
+    pk: ${DEVICE_CMD_SIGNING_PK:}
+  rf-code:
+    encryption-key: ${DEVICE_RF_CODE_ENCRYPTION_KEY:}
+  enrollment:
+    token-ttl-seconds: ${DEVICE_ENROLLMENT_TTL_SECONDS:600}

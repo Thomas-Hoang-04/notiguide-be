@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 
 @ConfigurationProperties(prefix = "device.transmitter")
 data class DeviceTransmitterProperties(
-    val enabled: Boolean = false,
+    val enabled: Boolean = true,
     val heartbeatIntervalSeconds: Long = 10,
     val heartbeatLivenessSeconds: Long = 30,
     val activeCacheSeconds: Long = 60,

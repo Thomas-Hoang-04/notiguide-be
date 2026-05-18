@@ -39,3 +39,11 @@ app:
     same-site: Strict
     domain:
     path: /api
+
+device:
+  command-signing:
+    pk: classpath:rsa/notiguide-sign.pem
+  rf-code:
+    encryption-key: ${DEVICE_RF_CODE_ENCRYPTION_KEY}
+  enrollment:
+    token-ttl-seconds: 3600

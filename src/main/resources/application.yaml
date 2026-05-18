@@ -27,18 +27,13 @@ mqtt:
   max-reconnect-delay-seconds: 128
 
 device:
-  command-signing:
-    pk: ${DEVICE_CMD_SIGNING_PK:}
   rf-code:
-    encryption-key: ${DEVICE_RF_CODE_ENCRYPTION_KEY:}
     default-bits-433m: 32
     default-bits-24g: 40
     pt2272-toggle-channel: 0
     pt2272-detoggle-channel: 1
-  enrollment:
-    token-ttl-seconds: ${DEVICE_ENROLLMENT_TTL_SECONDS:3600}
   transmitter:
-    enabled: ${DEVICE_TRANSMITTER_ENABLED:false}
+    enabled: ${DEVICE_TRANSMITTER_ENABLED:true}
     heartbeat-interval-seconds: 10
     heartbeat-liveness-seconds: 30
     active-cache-seconds: 60
