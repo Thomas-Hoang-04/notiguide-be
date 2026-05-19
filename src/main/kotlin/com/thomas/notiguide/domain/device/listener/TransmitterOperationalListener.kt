@@ -9,6 +9,7 @@ import com.thomas.notiguide.core.mqtt.MqttProperties
 import com.thomas.notiguide.core.redis.RedisKeyManager
 import com.thomas.notiguide.domain.device.service.DeviceLifecycleService
 import com.thomas.notiguide.domain.device.service.HubDiagnosticsService
+import com.thomas.notiguide.domain.device.service.TransmitterElectionService
 import io.r2dbc.spi.Readable
 import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.CoroutineScope
@@ -41,7 +42,8 @@ class TransmitterOperationalListener(
     private val redis: ReactiveRedisTemplate<String, String>,
     private val properties: DeviceTransmitterProperties,
     private val deviceLifecycleService: DeviceLifecycleService,
-    private val hubDiagnosticsService: HubDiagnosticsService
+    private val hubDiagnosticsService: HubDiagnosticsService,
+    private val electionService: TransmitterElectionService
 ) : SmartInitializingSingleton {
 
     private val log = LoggerFactory.getLogger(this::class.java)
@@ -108,6 +110,13 @@ class TransmitterOperationalListener(
             )
             .awaitSingle()
 
+        if (touched.storeId != null) {
+            val hasElected = redis.hasKey(RedisKeyManager.storeTransmitterActive(touched.storeId)).awaitSingle()
+            if (!hasElected) {
+                runCatching { electionService.electActive(touched.storeId) }
+            }
+        }
+
         heartbeat.diag?.let { diag ->
             hubDiagnosticsService.recordMqttDiagnostics(
                 deviceId = touched.deviceId,
@@ -161,7 +170,7 @@ class TransmitterOperationalListener(
             SET last_seen_at = :seenAt
             WHERE public_id = :publicId
               AND kind = 'TRANSMITTER_HUB'
-            RETURNING id
+            RETURNING id, store_id
             """
         )
             .bind("publicId", publicId)
@@ -171,12 +180,14 @@ class TransmitterOperationalListener(
             .awaitSingleOrNull()
 
     private fun mapHubTouch(row: Readable): HubTouchRecord = HubTouchRecord(
-        deviceId = row.get("id", UUID::class.java)!!
+        deviceId = row.get("id", UUID::class.java)!!,
+        storeId = row.get("store_id", UUID::class.java)
     )
 }
 
 private data class HubTouchRecord(
-    val deviceId: UUID
+    val deviceId: UUID,
+    val storeId: UUID?
 )
 
 private data class TransmitterHeartbeatEnvelope(
