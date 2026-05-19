@@ -104,7 +104,8 @@ class DeviceQueryService(
         val device = findDeviceById(deviceId) ?: return null
         val lifecycle = loadLifecycleCommand(deviceId)
         val isElected = if (device.kind.isHub() && device.storeId != null) {
-            loadElectedHubId(device.storeId) == deviceId
+            val electedId = loadElectedHubId(device.storeId)
+            if (electedId != null) electedId == deviceId else null
         } else null
         val boundTicket = if (!device.kind.isHub()) {
             loadBoundTicket(deviceId, device.storeId)

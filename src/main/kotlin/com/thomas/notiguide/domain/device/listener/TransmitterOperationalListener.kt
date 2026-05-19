@@ -98,8 +98,8 @@ class TransmitterOperationalListener(
             return
         }
 
-        val seenAt = heartbeat.issuedAt ?: OffsetDateTime.now(ZoneOffset.UTC)
-        val touched = touchHub(publicId, seenAt) ?: return
+        val serverNow = OffsetDateTime.now(ZoneOffset.UTC)
+        val touched = touchHub(publicId, serverNow) ?: return
         redis.opsForValue()
             .set(
                 RedisKeyManager.deviceHubAlive(touched.deviceId),
@@ -117,7 +117,7 @@ class TransmitterOperationalListener(
                 dispatchDaily = diag.dispatchDaily,
                 dispatchTotal = diag.dispatchTotal,
                 ip = diag.ip,
-                seenAt = seenAt
+                seenAt = serverNow
             )
         }
     }
