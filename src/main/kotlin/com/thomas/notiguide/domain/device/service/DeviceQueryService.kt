@@ -224,7 +224,7 @@ class DeviceQueryService(
             activatedAt = row.get("activated_at", OffsetDateTime::class.java),
             createdAt = row.get("created_at", OffsetDateTime::class.java),
             updatedAt = row.get("updated_at", OffsetDateTime::class.java),
-            rfCode = row.get("rf_version", Int::class.java)?.let {
+            rfCode = row.get("rf_version", Int::class.javaObjectType)?.let {
                 DeviceRfCodeSummaryDto(
                     bits = row.get("rf_bits", Short::class.java)!!.toInt(),
                     byteLen = row.get("rf_byte_len", Short::class.java)!!.toInt(),
@@ -235,7 +235,7 @@ class DeviceQueryService(
                 )
             }
         ),
-        registeredCount = row.get("registered_count", Long::class.java)
+        registeredCount = row.get("registered_count", Long::class.javaObjectType)
     )
 }
 

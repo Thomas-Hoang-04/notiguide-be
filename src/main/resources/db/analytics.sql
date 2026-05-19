@@ -78,7 +78,7 @@ days AS (
         gs.day_offset,
         ((now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - gs.day_offset) AS business_day
     FROM store_profiles sp
-    CROSS JOIN generate_series(0, 30) AS gs(day_offset)
+    CROSS JOIN generate_series(0, 180) AS gs(day_offset)
 ),
 
 -- Per-day volume with realistic variance:

@@ -78,6 +78,9 @@ class QueueEventBroadcaster(
         sink.asFlux().filter { it.storeId == storeId }
 
     private fun handleMqttMessage(topic: String, message: MqttMessage) {
+        val prefix = mqttProperties?.topicPrefix ?: return
+        if (!topic.startsWith("$prefix/store/") || !topic.endsWith("/queue")) return
+
         try {
             val event = objectMapper.readValue(message.payload, QueueSseEvent::class.java)
             sink.tryEmitNext(event)
