@@ -1,20 +1,16 @@
 package com.thomas.notiguide.core.device
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.thomas.notiguide.core.mqtt.MqttClientManager
 import com.thomas.notiguide.core.mqtt.MqttProperties
 import com.thomas.notiguide.domain.device.types.DeviceFamily
 import com.thomas.notiguide.domain.device.types.DeviceKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
-import org.springframework.stereotype.Component
 import java.time.OffsetDateTime
 import java.util.UUID
 
-@Component
-@ConditionalOnBean(MqttClientManager::class)
 class DeviceMqttPublisher(
     private val mqttClientManager: MqttClientManager,
     private val mqttProperties: MqttProperties,

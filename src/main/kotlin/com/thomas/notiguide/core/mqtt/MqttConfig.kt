@@ -1,6 +1,7 @@
 package com.thomas.notiguide.core.mqtt
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.thomas.notiguide.core.device.DeviceMqttPublisher
 import org.eclipse.paho.mqttv5.client.MqttAsyncClient
 import org.eclipse.paho.mqttv5.client.MqttConnectionOptions
 import org.eclipse.paho.mqttv5.client.persist.MemoryPersistence
@@ -55,4 +56,10 @@ class MqttConfig(private val props: MqttProperties) {
         clientManager: MqttClientManager,
         objectMapper: ObjectMapper
     ): MqttPublisher = MqttPublisher(clientManager, props, objectMapper)
+
+    @Bean
+    fun deviceMqttPublisher(
+        clientManager: MqttClientManager,
+        objectMapper: ObjectMapper
+    ): DeviceMqttPublisher = DeviceMqttPublisher(clientManager, props, objectMapper)
 }
