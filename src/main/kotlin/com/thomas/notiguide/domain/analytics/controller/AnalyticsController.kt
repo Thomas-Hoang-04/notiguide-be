@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.time.LocalDate
 import java.util.UUID
 
 @RestController
@@ -42,20 +43,24 @@ class AnalyticsController(
 
     @GetMapping("/overview/throughput")
     suspend fun getOverviewThroughput(
-        @RequestParam range: Range,
+        @RequestParam(required = false) range: Range?,
+        @RequestParam(required = false) from: LocalDate?,
+        @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<DailyThroughputResponse> {
         requireSuperAdmin(principal)
-        return ResponseEntity.ok(analyticsQueryService.getOverviewThroughput(range))
+        return ResponseEntity.ok(analyticsQueryService.getOverviewThroughput(range, from, to))
     }
 
     @GetMapping("/overview")
     suspend fun getOverview(
-        @RequestParam period: Period,
+        @RequestParam(required = false) period: Period?,
+        @RequestParam(required = false) from: LocalDate?,
+        @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<OverviewResponse> {
         requireSuperAdmin(principal)
-        return ResponseEntity.ok(analyticsQueryService.getOverview(period))
+        return ResponseEntity.ok(analyticsQueryService.getOverview(period, from, to))
     }
 
     // -- Store-specific (admin with store access) --
@@ -72,51 +77,61 @@ class AnalyticsController(
     @GetMapping("/{storeId}/summary")
     suspend fun getStoreSummary(
         @PathVariable storeId: UUID,
-        @RequestParam period: Period,
+        @RequestParam(required = false) period: Period?,
+        @RequestParam(required = false) from: LocalDate?,
+        @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<StoreSummaryResponse> {
         StoreAccessUtil.requireStoreAccess(principal, storeId)
-        return ResponseEntity.ok(analyticsQueryService.getStoreSummary(storeId, period))
+        return ResponseEntity.ok(analyticsQueryService.getStoreSummary(storeId, period, from, to))
     }
 
     @GetMapping("/{storeId}/peak-hours")
     suspend fun getPeakHours(
         @PathVariable storeId: UUID,
-        @RequestParam range: Range,
+        @RequestParam(required = false) range: Range?,
+        @RequestParam(required = false) from: LocalDate?,
+        @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<PeakHoursResponse> {
         StoreAccessUtil.requireStoreAccess(principal, storeId)
-        return ResponseEntity.ok(analyticsQueryService.getPeakHours(storeId, range))
+        return ResponseEntity.ok(analyticsQueryService.getPeakHours(storeId, range, from, to))
     }
 
     @GetMapping("/{storeId}/throughput")
     suspend fun getDailyThroughput(
         @PathVariable storeId: UUID,
-        @RequestParam range: Range,
+        @RequestParam(required = false) range: Range?,
+        @RequestParam(required = false) from: LocalDate?,
+        @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<DailyThroughputResponse> {
         StoreAccessUtil.requireStoreAccess(principal, storeId)
-        return ResponseEntity.ok(analyticsQueryService.getDailyThroughput(storeId, range))
+        return ResponseEntity.ok(analyticsQueryService.getDailyThroughput(storeId, range, from, to))
     }
 
     @GetMapping("/{storeId}/wait-distribution")
     suspend fun getWaitDistribution(
         @PathVariable storeId: UUID,
-        @RequestParam period: Period,
+        @RequestParam(required = false) period: Period?,
+        @RequestParam(required = false) from: LocalDate?,
+        @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<WaitDistributionResponse> {
         StoreAccessUtil.requireStoreAccess(principal, storeId)
-        return ResponseEntity.ok(analyticsQueryService.getWaitDistribution(storeId, period))
+        return ResponseEntity.ok(analyticsQueryService.getWaitDistribution(storeId, period, from, to))
     }
 
     @GetMapping("/{storeId}/heatmap")
     suspend fun getHourlyHeatmap(
         @PathVariable storeId: UUID,
-        @RequestParam range: Range,
+        @RequestParam(required = false) range: Range?,
+        @RequestParam(required = false) from: LocalDate?,
+        @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<HourlyHeatmapResponse> {
         StoreAccessUtil.requireStoreAccess(principal, storeId)
-        return ResponseEntity.ok(analyticsQueryService.getHourlyHeatmap(storeId, range))
+        return ResponseEntity.ok(analyticsQueryService.getHourlyHeatmap(storeId, range, from, to))
     }
 
     private fun requireSuperAdmin(principal: AdminPrincipal) {

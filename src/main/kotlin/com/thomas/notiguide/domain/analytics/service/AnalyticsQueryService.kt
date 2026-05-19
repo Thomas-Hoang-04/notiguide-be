@@ -93,12 +93,13 @@ class AnalyticsQueryService(
         )
     }
 
-    suspend fun getStoreSummary(storeId: UUID, period: Period): StoreSummaryResponse {
-        val (from, to) = periodToRange(period)
+    suspend fun getStoreSummary(storeId: UUID, period: Period?, customFrom: LocalDate?, customTo: LocalDate?): StoreSummaryResponse {
+        val (from, to) = resolveTimeRange(period, null, customFrom, customTo)
+        val periodLabel = period?.name?.lowercase() ?: "custom"
         val summary = analyticsEventRepository.getSummary(storeId, from, to)
 
         return StoreSummaryResponse(
-            period = period.name.lowercase(),
+            period = periodLabel,
             totalIssued = summary.totalIssued,
             totalCompleted = summary.totalCompleted,
             totalCancelled = summary.totalCancelled,
@@ -112,11 +113,11 @@ class AnalyticsQueryService(
         )
     }
 
-    suspend fun getPeakHours(storeId: UUID, range: Range): PeakHoursResponse {
-        val (from, to) = rangeToRange(range)
+    suspend fun getPeakHours(storeId: UUID, range: Range?, customFrom: LocalDate?, customTo: LocalDate?): PeakHoursResponse {
+        val (from, to) = resolveTimeRange(null, range, customFrom, customTo)
+        val rangeLabel = range?.name?.lowercase() ?: "custom"
         val rows = analyticsEventRepository.getHourlyDistribution(storeId, from, to)
 
-        // Fill in missing hours with 0
         val hourMap = rows.associateBy { it.hour }
         val hours = (0..23).map { h ->
             HourlyCount(
@@ -126,17 +127,18 @@ class AnalyticsQueryService(
         }
 
         return PeakHoursResponse(
-            range = range.name.lowercase(),
+            range = rangeLabel,
             hours = hours
         )
     }
 
-    suspend fun getDailyThroughput(storeId: UUID, range: Range): DailyThroughputResponse {
-        val (from, to) = rangeToRange(range)
+    suspend fun getDailyThroughput(storeId: UUID, range: Range?, customFrom: LocalDate?, customTo: LocalDate?): DailyThroughputResponse {
+        val (from, to) = resolveTimeRange(null, range, customFrom, customTo)
+        val rangeLabel = range?.name?.lowercase() ?: "custom"
         val rows = analyticsEventRepository.getDailyThroughput(storeId, from, to)
 
         return DailyThroughputResponse(
-            range = range.name.lowercase(),
+            range = rangeLabel,
             days = rows.map { r ->
                 DailyCount(
                     date = r.date,
@@ -149,12 +151,13 @@ class AnalyticsQueryService(
         )
     }
 
-    suspend fun getOverview(period: Period): OverviewResponse {
-        val (from, to) = periodToRange(period)
+    suspend fun getOverview(period: Period?, customFrom: LocalDate?, customTo: LocalDate?): OverviewResponse {
+        val (from, to) = resolveTimeRange(period, null, customFrom, customTo)
+        val periodLabel = period?.name?.lowercase() ?: "custom"
         val rows = analyticsEventRepository.getOverview(from, to)
 
         return OverviewResponse(
-            period = period.name.lowercase(),
+            period = periodLabel,
             totalStores = rows.size.toLong(),
             totalIssued = rows.sumOf { it.issued },
             totalCompleted = rows.sumOf { it.completed },
@@ -173,12 +176,13 @@ class AnalyticsQueryService(
         )
     }
 
-    suspend fun getOverviewThroughput(range: Range): DailyThroughputResponse {
-        val (from, to) = rangeToRange(range)
+    suspend fun getOverviewThroughput(range: Range?, customFrom: LocalDate?, customTo: LocalDate?): DailyThroughputResponse {
+        val (from, to) = resolveTimeRange(null, range, customFrom, customTo)
+        val rangeLabel = range?.name?.lowercase() ?: "custom"
         val rows = analyticsEventRepository.getOverviewDailyThroughput(from, to)
 
         return DailyThroughputResponse(
-            range = range.name.lowercase(),
+            range = rangeLabel,
             days = rows.map { r ->
                 DailyCount(
                     date = r.date,
@@ -191,8 +195,9 @@ class AnalyticsQueryService(
         )
     }
 
-    suspend fun getWaitDistribution(storeId: UUID, period: Period): WaitDistributionResponse {
-        val (from, to) = periodToRange(period)
+    suspend fun getWaitDistribution(storeId: UUID, period: Period?, customFrom: LocalDate?, customTo: LocalDate?): WaitDistributionResponse {
+        val (from, to) = resolveTimeRange(period, null, customFrom, customTo)
+        val periodLabel = period?.name?.lowercase() ?: "custom"
         val rows = analyticsEventRepository.getWaitDistribution(storeId, from, to)
 
         val labels = listOf("0-5", "5-10", "10-15", "15-20", "20+")
@@ -209,13 +214,14 @@ class AnalyticsQueryService(
         }
 
         return WaitDistributionResponse(
-            period = period.name.lowercase(),
+            period = periodLabel,
             buckets = buckets
         )
     }
 
-    suspend fun getHourlyHeatmap(storeId: UUID, range: Range): HourlyHeatmapResponse {
-        val (from, to) = rangeToRange(range)
+    suspend fun getHourlyHeatmap(storeId: UUID, range: Range?, customFrom: LocalDate?, customTo: LocalDate?): HourlyHeatmapResponse {
+        val (from, to) = resolveTimeRange(null, range, customFrom, customTo)
+        val rangeLabel = range?.name?.lowercase() ?: "custom"
         val rows = analyticsEventRepository.getHourlyHeatmap(storeId, from, to)
 
         val cellMap = rows.associateBy { it.dayOfWeek to it.hour }
@@ -230,7 +236,7 @@ class AnalyticsQueryService(
         }
 
         return HourlyHeatmapResponse(
-            range = range.name.lowercase(),
+            range = rangeLabel,
             cells = cells
         )
     }
@@ -271,6 +277,21 @@ class AnalyticsQueryService(
         redis.opsForValue().set(cacheKey, avg.toString(), AVG_SERVICE_CACHE_TTL).awaitSingleOrNull()
 
         return avg
+    }
+
+    private fun resolveTimeRange(
+        period: Period?,
+        range: Range?,
+        customFrom: LocalDate?,
+        customTo: LocalDate?
+    ): Pair<OffsetDateTime, OffsetDateTime> {
+        if (customFrom != null && customTo != null) {
+            return customFrom.atStartOfDay(storeTimezone).toOffsetDateTime() to
+                    customTo.plusDays(1).atStartOfDay(storeTimezone).toOffsetDateTime()
+        }
+        if (period != null) return periodToRange(period)
+        if (range != null) return rangeToRange(range)
+        throw IllegalArgumentException("Either period, range, or from/to must be provided")
     }
 
     private fun periodToRange(period: Period): Pair<OffsetDateTime, OffsetDateTime> {

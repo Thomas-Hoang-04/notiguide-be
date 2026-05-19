@@ -1,6 +1,7 @@
 package com.thomas.notiguide.core.ratelimit
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.thomas.notiguide.core.config.AppProperties
 import com.thomas.notiguide.core.exception.model.ErrorResponse
 import com.thomas.notiguide.shared.http.ClientIpResolver
 import kotlinx.coroutines.reactor.awaitSingleOrNull
@@ -18,6 +19,7 @@ import java.time.LocalDateTime
 
 @Component
 class RateLimitFilter(
+    private val appProperties: AppProperties,
     private val rateLimitProperties: RateLimitProperties,
     private val rateLimiter: RateLimiter,
     private val objectMapper: ObjectMapper
@@ -78,6 +80,7 @@ class RateLimitFilter(
         val response = exchange.response
         response.statusCode = HttpStatus.TOO_MANY_REQUESTS
         response.headers.contentType = MediaType.APPLICATION_JSON
+        applyCorsHeaders(exchange)
 
         val retryInSeconds = (result.resetAtEpochSeconds - Instant.now().epochSecond).coerceAtLeast(1)
         val body = ErrorResponse(
@@ -92,6 +95,32 @@ class RateLimitFilter(
         val bytes = objectMapper.writeValueAsBytes(body)
         val buffer = response.bufferFactory().wrap(bytes)
         response.writeWith(Mono.just(buffer)).awaitSingleOrNull()
+    }
+
+    private fun applyCorsHeaders(exchange: ServerWebExchange) {
+        val origin = exchange.request.headers.origin ?: return
+        if (!isAllowedOrigin(origin)) return
+
+        val headers = exchange.response.headers
+        headers.set("Access-Control-Allow-Origin", origin)
+        headers.set("Access-Control-Allow-Credentials", "true")
+        headers.set(
+            "Access-Control-Expose-Headers",
+            "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset"
+        )
+        appendVary(headers, HttpHeaders.ORIGIN)
+        appendVary(headers, HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD)
+        appendVary(headers, HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS)
+    }
+
+    private fun isAllowedOrigin(origin: String): Boolean =
+        appProperties.cors.allowedOrigins.any { allowed ->
+            allowed == "*" || allowed.equals(origin, ignoreCase = true)
+        }
+
+    private fun appendVary(headers: HttpHeaders, value: String) {
+        if (headers[HttpHeaders.VARY]?.contains(value) == true) return
+        headers.add(HttpHeaders.VARY, value)
     }
 
     private data class TierMatch(

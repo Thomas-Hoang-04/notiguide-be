@@ -37,13 +37,13 @@ rate-limit:
   enabled: true
   strict:
     window-seconds: 60
-    max-requests: 20
+    max-requests: 200
   auth:
     window-seconds: 60
-    max-requests: 10
+    max-requests: 25
   standard:
     window-seconds: 60
-    max-requests: 60
+    max-requests: 400
 
 device:
   command-signing:
