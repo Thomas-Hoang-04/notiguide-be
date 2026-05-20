@@ -251,7 +251,7 @@ class RfCodeService(
             }
             40
         }
-        else -> requestedBits ?: throw DeviceBadRequestEnvelopeException("width_out_of_range")
+        else -> requestedBits ?: properties.rfCode.defaultBits433m
     }
 
     private suspend fun generateUniquePlaintext(
