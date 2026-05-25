@@ -108,7 +108,9 @@ class StoreService(
         )
 
         serviceTypeRepository.save(ServiceType(storeId = saved.id, name = "General", prefix = "A"))
-        return saved.toDto()
+        val complete = storeRepository.findById(saved.id)
+            ?: throw IllegalStateException("Store not found after save")
+        return complete.toDto()
     }
 
     @Transactional
