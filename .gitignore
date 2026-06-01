@@ -45,3 +45,5 @@ NOTES.txt
 docs/
 **/rsa/**
 notiguide/
+!src/test/kotlin/com/thomas/notiguide/
+!src/test/kotlin/com/thomas/notiguide/**

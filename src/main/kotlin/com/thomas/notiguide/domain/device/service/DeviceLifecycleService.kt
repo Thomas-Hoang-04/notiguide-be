@@ -62,7 +62,7 @@ class DeviceLifecycleService(
             throw DeviceConflictEnvelopeException("device_decommissioned")
         }
 
-        if (device.kind.isPassive()) {
+        if (device.kind.isPassive() || device.hubSlot != null) {
             val saved = deviceRepository.save(device.copy(status = action.targetStatus()))
             redis.delete(RedisKeyManager.deviceLifecycleCommand(saved.id!!)).awaitSingleOrNull()
             if (action == DeviceLifecycleAction.DECOMMISSION) {
