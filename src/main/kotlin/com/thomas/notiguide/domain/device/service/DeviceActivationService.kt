@@ -92,13 +92,22 @@ class DeviceActivationService(
             log.warn("Failed to clear activation state for device {}", saved.id, ex)
         }
 
+        val activationStoreId = if (saved.kind.isHub()) {
+            requireNotNull(saved.storeId) {
+                "Activated transmitter hubs must have a store_id for cluster roster sync"
+            }.toString()
+        } else {
+            saved.storeId?.toString()
+        }
+
         deviceMqttPublisher.publishResult(
             kind = saved.kind,
             challengeId = challengeId,
             publicId = newPublicId,
             assignedDeviceName = requireNotNull(saved.assignedName) {
                 "Approved devices must have an assigned name before activation"
-            }
+            },
+            storeId = activationStoreId
         )
 
         if (priorPublicId != null) {

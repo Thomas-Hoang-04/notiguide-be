@@ -85,14 +85,16 @@ class DeviceMqttPublisher(
         kind: DeviceKind,
         challengeId: UUID,
         publicId: String,
-        assignedDeviceName: String
+        assignedDeviceName: String,
+        storeId: String? = null
     ) {
         publishJson(
             topic = bootstrapTopic(kind, challengeId),
             payload = ResultEnvelope(
                 challengeId = challengeId,
                 publicId = publicId,
-                assignedDeviceName = assignedDeviceName
+                assignedDeviceName = assignedDeviceName,
+                storeId = storeId
             )
         )
     }
@@ -264,6 +266,8 @@ class DeviceMqttPublisher(
         @field:JsonProperty("public_id")
         val publicId: String,
         @field:JsonProperty("assigned_device_name")
-        val assignedDeviceName: String
+        val assignedDeviceName: String,
+        @field:JsonProperty("store_id")
+        val storeId: String? = null
     )
 }
