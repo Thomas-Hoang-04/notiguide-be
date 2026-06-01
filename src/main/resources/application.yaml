@@ -30,8 +30,8 @@ device:
   rf-code:
     default-bits-433m: 32
     default-bits-24g: 40
-    pt2272-toggle-channel: 0
-    pt2272-detoggle-channel: 1
+    pt2272-toggle-channel: 1
+    pt2272-detoggle-channel: 0
   transmitter:
     enabled: ${DEVICE_TRANSMITTER_ENABLED:true}
     heartbeat-interval-seconds: 10

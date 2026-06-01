@@ -17,8 +17,8 @@ data class DeviceCommandSigningProperties(
         val encryptionKey: String = "",
         val defaultBits433m: Int = 32,
         val defaultBits24g: Int = 40,
-        val pt2272ToggleChannel: Int = 0,
-        val pt2272DetoggleChannel: Int = 1
+        val pt2272ToggleChannel: Int = 1,
+        val pt2272DetoggleChannel: Int = 0
     ) {
         init {
             require(defaultBits433m in 1..32) { "433MHz band default bit count must be between 1 and 32" }
