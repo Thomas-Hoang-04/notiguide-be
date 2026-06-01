@@ -36,4 +36,18 @@ object DeviceCanonical {
         protoAny: Boolean,
         issuedAt: OffsetDateTime
     ): String = "transmit-v1|$hubPublicId|$dispatchId|$receiverPublicId|$band|$rfCodeHex|$rfCodeBits|$protoAny|${issuedAt.toInstant()}"
+
+    fun rosterAck(
+        hubPublicId: String,
+        seq: Int,
+        issuedAt: OffsetDateTime
+    ): String = "roster-ack-v1|$hubPublicId|$seq|${issuedAt.toInstant()}"
+
+    fun slotDispatch(
+        hubPublicId: String,
+        dispatchId: UUID,
+        slot: Int,
+        action: String,
+        issuedAt: OffsetDateTime
+    ): String = "dispatch-v1|$hubPublicId|$dispatchId|$slot|$action|${issuedAt.toInstant()}"
 }

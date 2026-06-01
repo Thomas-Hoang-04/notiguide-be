@@ -2,7 +2,6 @@ package com.thomas.notiguide.core.database
 
 import com.thomas.notiguide.core.config.AppProperties
 import com.thomas.notiguide.domain.admin.types.AdminRole
-import com.thomas.notiguide.domain.device.types.DeviceHardwareModel
 import com.thomas.notiguide.domain.device.types.DeviceKind
 import com.thomas.notiguide.domain.device.types.DeviceRfAckStatus
 import com.thomas.notiguide.domain.device.types.DeviceStatus
@@ -85,7 +84,6 @@ class R2DBCConfig(
                 EnumCodec.builder()
                     .withEnum("admin_role", AdminRole::class.java)
                     .withEnum("device_kind", DeviceKind::class.java)
-                    .withEnum("device_hardware_model", DeviceHardwareModel::class.java)
                     .withEnum("device_status", DeviceStatus::class.java)
                     .withEnum("device_rf_ack_status", DeviceRfAckStatus::class.java)
                     .build()
@@ -119,7 +117,6 @@ class R2DBCConfig(
     override fun getCustomConverters(): List<Any?> = listOf(
         AdminRoleWriteConverter,
         DeviceKindWriteConverter,
-        DeviceHardwareModelWriteConverter,
         DeviceStatusWriteConverter,
         DeviceRfAckStatusWriteConverter
     )
@@ -129,9 +126,6 @@ class R2DBCConfig(
 
     @WritingConverter
     object DeviceKindWriteConverter : EnumWriteSupport<DeviceKind>()
-
-    @WritingConverter
-    object DeviceHardwareModelWriteConverter : EnumWriteSupport<DeviceHardwareModel>()
 
     @WritingConverter
     object DeviceStatusWriteConverter : EnumWriteSupport<DeviceStatus>()

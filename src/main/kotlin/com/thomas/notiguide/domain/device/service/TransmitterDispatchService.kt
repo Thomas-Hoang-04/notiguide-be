@@ -1,6 +1,7 @@
 package com.thomas.notiguide.domain.device.service
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.thomas.notiguide.core.device.DeviceCanonical
 import com.thomas.notiguide.core.device.DeviceCommandSigner
 import com.thomas.notiguide.core.device.DeviceCommandSigningProperties
@@ -11,6 +12,7 @@ import com.thomas.notiguide.core.mqtt.MqttPublisher.QueueEventType
 import com.thomas.notiguide.core.redis.RedisKeyManager
 import com.thomas.notiguide.core.sse.QueueEventBroadcaster
 import com.thomas.notiguide.core.sse.QueueSseEvent
+import com.thomas.notiguide.domain.device.dto.DispatchTrackingRecord
 import com.thomas.notiguide.domain.device.dto.DeviceDispatchEvent
 import com.thomas.notiguide.domain.device.entity.Device
 import com.thomas.notiguide.domain.device.repository.DeviceRepository
@@ -31,6 +33,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.data.redis.core.ReactiveRedisTemplate
 import org.springframework.stereotype.Service
 import reactor.core.Disposable
+import java.time.Duration
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
@@ -47,6 +50,7 @@ class TransmitterDispatchService(
     private val properties: DeviceCommandSigningProperties,
     private val signerProvider: ObjectProvider<DeviceCommandSigner>,
     private val publisherProvider: ObjectProvider<DeviceMqttPublisher>,
+    private val objectMapper: ObjectMapper,
     private val mqttPublisher: MqttPublisher? = null
 ) : SmartInitializingSingleton {
 
@@ -83,13 +87,31 @@ class TransmitterDispatchService(
 
         val receiver = deviceRepository.findById(event.deviceId)
         val hubPublicId = hub.publicId
-        if (receiver == null || hubPublicId == null || receiver.publicId == null) {
+        if (receiver == null || hubPublicId == null) {
             log.warn(
                 "transmitter_dispatch_failed_missing_device store={} ticket={} device={} hub={}",
                 event.storeId,
                 event.ticketId,
                 event.deviceId,
                 hub.id
+            )
+            emitDispatchFailed(event, "device_not_found")
+            return
+        }
+
+        // Hub-paired receivers: slot-based dispatch (no RF code lookup needed)
+        if (receiver.hubSlot != null) {
+            handleSlotDispatch(hub, receiver, event)
+            return
+        }
+
+        // Full-payload dispatch requires receiver publicId
+        if (receiver.publicId == null) {
+            log.warn(
+                "transmitter_dispatch_failed_no_public_id store={} ticket={} device={}",
+                event.storeId,
+                event.ticketId,
+                event.deviceId
             )
             emitDispatchFailed(event, "device_not_found")
             return
@@ -165,6 +187,26 @@ class TransmitterDispatchService(
             return
         }
 
+        runCatching {
+            val trackingPayload = objectMapper.writeValueAsString(
+                DispatchTrackingRecord(
+                    deviceId = event.deviceId,
+                    storeId = event.storeId,
+                    ticketId = event.ticketId,
+                    ticketNumber = event.ticketNumber
+                )
+            )
+            redis.opsForValue()
+                .set(
+                    RedisKeyManager.dispatchTracking(dispatchId),
+                    trackingPayload,
+                    Duration.ofMinutes(5)
+                )
+                .awaitSingleOrNull()
+        }.onFailure { ex ->
+            log.warn("dispatch_tracking_write_failed dispatch={}", dispatchId, ex)
+        }
+
         if (event.type == DeviceDispatchEventType.DEVICE_STOP_REQUESTED &&
             event.disposition == DeviceDispatchStopDisposition.RELEASE
         ) {
@@ -210,6 +252,89 @@ class TransmitterDispatchService(
                 reason = reason
             )
         )
+    }
+
+    private suspend fun handleSlotDispatch(
+        hub: Device,
+        receiver: Device,
+        event: DeviceDispatchEvent
+    ) {
+        val hubPublicId = hub.publicId ?: return
+        val signer = signerProvider.ifAvailable ?: run {
+            emitDispatchFailed(event, "infrastructure_unavailable")
+            return
+        }
+        val publisher = publisherProvider.ifAvailable ?: run {
+            emitDispatchFailed(event, "infrastructure_unavailable")
+            return
+        }
+
+        val dispatchId = UUID.randomUUID()
+        val issuedAt = OffsetDateTime.now(ZoneOffset.UTC)
+        val action = when (event.type) {
+            DeviceDispatchEventType.DEVICE_CALL_REQUESTED -> "call"
+            DeviceDispatchEventType.DEVICE_STOP_REQUESTED -> "stop"
+        }
+
+        val canonical = DeviceCanonical.slotDispatch(
+            hubPublicId = hubPublicId,
+            dispatchId = dispatchId,
+            slot = receiver.hubSlot!!.toInt(),
+            action = action,
+            issuedAt = issuedAt
+        )
+
+        val envelope = SlotDispatchEnvelope(
+            dispatchId = dispatchId,
+            slot = receiver.hubSlot.toInt(),
+            action = action,
+            issuedAt = issuedAt.toInstant().toString(),
+            signatureB64 = signer.sign(canonical)
+        )
+
+        runCatching {
+            publisher.publishTransmit(hubPublicId, envelope)
+        }.onFailure { ex ->
+            log.warn(
+                "transmitter_slot_dispatch_failed_publish store={} ticket={} slot={}",
+                event.storeId, event.ticketId, receiver.hubSlot, ex
+            )
+            emitDispatchFailed(event, "publish_failed")
+            return
+        }
+
+        runCatching {
+            val trackingPayload = objectMapper.writeValueAsString(
+                DispatchTrackingRecord(
+                    deviceId = event.deviceId,
+                    storeId = event.storeId,
+                    ticketId = event.ticketId,
+                    ticketNumber = event.ticketNumber
+                )
+            )
+            redis.opsForValue()
+                .set(
+                    RedisKeyManager.dispatchTracking(dispatchId),
+                    trackingPayload,
+                    Duration.ofMinutes(5)
+                )
+                .awaitSingleOrNull()
+        }.onFailure { ex ->
+            log.warn("dispatch_tracking_write_failed dispatch={}", dispatchId, ex)
+        }
+
+        if (event.type == DeviceDispatchEventType.DEVICE_STOP_REQUESTED &&
+            event.disposition == DeviceDispatchStopDisposition.RELEASE
+        ) {
+            runCatching {
+                redis.delete(RedisKeyManager.deviceBusy(event.deviceId)).awaitSingleOrNull()
+            }.onFailure { ex ->
+                log.warn(
+                    "transmitter_slot_dispatch_busy_release_failed store={} ticket={} device={}",
+                    event.storeId, event.ticketId, event.deviceId, ex
+                )
+            }
+        }
     }
 
     private fun buildPayload(
@@ -320,6 +445,19 @@ private data class TransmitEnvelope(
     val rfCodeBits: Int,
     @field:JsonProperty("proto_any")
     val protoAny: Boolean,
+    @field:JsonProperty("issued_at")
+    val issuedAt: String,
+    @field:JsonProperty("signature_b64")
+    val signatureB64: String
+)
+
+private data class SlotDispatchEnvelope(
+    @field:JsonProperty("schema_version")
+    val schemaVersion: Int = 1,
+    @field:JsonProperty("dispatch_id")
+    val dispatchId: UUID,
+    val slot: Int,
+    val action: String,
     @field:JsonProperty("issued_at")
     val issuedAt: String,
     @field:JsonProperty("signature_b64")

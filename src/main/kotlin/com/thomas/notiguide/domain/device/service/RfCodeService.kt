@@ -271,7 +271,17 @@ class RfCodeService(
                 return@repeat
             }
 
-            deviceRfCodeRepository.findCollision(device.kind, device.storeId, plaintext) ?: return plaintext
+            val collision = if (device.kind.is433Band()) {
+                deviceRfCodeRepository.findMaskedCollision(
+                    storeId = requireNotNull(device.storeId),
+                    candidatePlaintext = plaintext,
+                    candidateBits = bits,
+                    excludeDeviceId = device.id
+                )
+            } else {
+                deviceRfCodeRepository.findExact24GCollision(plaintext)
+            }
+            if (collision == null) return plaintext
         }
 
         throw DeviceConflictEnvelopeException("rf_code_space_exhausted")

@@ -2,7 +2,6 @@ package com.thomas.notiguide.domain.device.repository
 
 import com.thomas.notiguide.core.device.DeviceCommandSigningProperties
 import com.thomas.notiguide.core.exception.ServiceUnavailableException
-import com.thomas.notiguide.domain.device.types.DeviceKind
 import com.thomas.notiguide.domain.device.types.DeviceRfAckStatus
 import io.r2dbc.spi.Readable
 import kotlinx.coroutines.reactor.awaitSingle
@@ -102,50 +101,26 @@ class DeviceRfCodeRepository(
             .awaitSingle()
     }
 
-    suspend fun findCollision(
-        kind: DeviceKind,
-        storeId: UUID?,
+    suspend fun findExact24GCollision(
         plaintext: ByteArray
     ): DeviceCodeCollision? {
         val encryptionKey = requireEncryptionKey()
-        return if (kind.is24Band()) {
-            client.sql(
-                """
-                SELECT d.id, d.public_id
-                FROM device_rf_code r
-                JOIN device d ON d.id = r.device_id
-                WHERE d.kind = 'RECEIVER_2_4G'
-                  AND d.status IN ('PENDING_RF_CODE', 'ACTIVE', 'SUSPENDED')
-                  AND pgp_sym_decrypt_bytea(r.payload, :encryptionKey) = :plaintext
-                LIMIT 1
-                """
-            )
-                .bind("encryptionKey", encryptionKey)
-                .bind("plaintext", plaintext)
-                .map(::mapCollision)
-                .one()
-                .awaitSingleOrNull()
-        } else {
-            requireNotNull(storeId) { "433M RF-code uniqueness checks require a storeId" }
-            client.sql(
-                """
-                SELECT d.id, d.public_id
-                FROM device_rf_code r
-                JOIN device d ON d.id = r.device_id
-                WHERE d.kind IN ('RECEIVER_433M', 'RECEIVER_433M_PASSIVE')
-                  AND d.store_id = :storeId
-                  AND d.status IN ('PENDING_RF_CODE', 'ACTIVE', 'SUSPENDED')
-                  AND pgp_sym_decrypt_bytea(r.payload, :encryptionKey) = :plaintext
-                LIMIT 1
-                """
-            )
-                .bind("storeId", storeId)
-                .bind("encryptionKey", encryptionKey)
-                .bind("plaintext", plaintext)
-                .map(::mapCollision)
-                .one()
-                .awaitSingleOrNull()
-        }
+        return client.sql(
+            """
+            SELECT d.id, d.public_id
+            FROM device_rf_code r
+            JOIN device d ON d.id = r.device_id
+            WHERE d.kind = 'RECEIVER_2_4G'
+              AND d.status IN ('PENDING_RF_CODE', 'ACTIVE', 'SUSPENDED')
+              AND pgp_sym_decrypt_bytea(r.payload, :encryptionKey) = :plaintext
+            LIMIT 1
+            """
+        )
+            .bind("encryptionKey", encryptionKey)
+            .bind("plaintext", plaintext)
+            .map(::mapCollision)
+            .one()
+            .awaitSingleOrNull()
     }
 
     suspend fun findCurrent(deviceId: UUID): CurrentRfCodeRecord? =
@@ -160,6 +135,62 @@ class DeviceRfCodeRepository(
             .map(::mapCurrent)
             .one()
             .awaitSingleOrNull()
+
+    suspend fun findAll433MDecryptedInStore(storeId: UUID): List<Decrypted433MRecord> {
+        val encryptionKey = requireEncryptionKey()
+        return client.sql(
+            """
+            SELECT d.id, d.public_id, r.bits,
+                   pgp_sym_decrypt_bytea(r.payload, :encryptionKey) AS plaintext
+            FROM device_rf_code r
+            JOIN device d ON d.id = r.device_id
+            WHERE d.kind IN ('RECEIVER_433M', 'RECEIVER_433M_PASSIVE')
+              AND d.store_id = :storeId
+              AND d.status IN ('PENDING_RF_CODE', 'ACTIVE', 'SUSPENDED')
+            """
+        )
+            .bind("storeId", storeId)
+            .bind("encryptionKey", encryptionKey)
+            .map { row ->
+                Decrypted433MRecord(
+                    deviceId = row.get("id", UUID::class.java)!!,
+                    publicId = row.get("public_id", String::class.java),
+                    bits = row.get("bits", Short::class.java)!!.toInt(),
+                    plaintext = row.get("plaintext", ByteArray::class.java)!!
+                )
+            }
+            .all()
+            .collectList()
+            .awaitSingle()
+    }
+
+    suspend fun findMaskedCollision(
+        storeId: UUID,
+        candidatePlaintext: ByteArray,
+        candidateBits: Int,
+        excludeDeviceId: UUID? = null
+    ): DeviceCodeCollision? {
+        val existing = findAll433MDecryptedInStore(storeId)
+        return existing
+            .filter { it.deviceId != excludeDeviceId }
+            .firstOrNull { record ->
+                val overlapBits = minOf(candidateBits, record.bits)
+                val mask = if (overlapBits >= 32) 0xFFFFFFFF.toInt()
+                           else (1 shl overlapBits) - 1
+                val candidateInt = candidatePlaintext.toBigEndianInt() and mask
+                val existingInt = record.plaintext.toBigEndianInt() and mask
+                candidateInt == existingInt
+            }
+            ?.let { DeviceCodeCollision(it.deviceId, it.publicId) }
+    }
+
+    private fun ByteArray.toBigEndianInt(): Int {
+        var result = 0
+        for (b in this) {
+            result = (result shl 8) or (b.toInt() and 0xFF)
+        }
+        return result
+    }
 
     suspend fun findDecryptedPayload(deviceId: UUID): DispatchRfCodeRecord? {
         val encryptionKey = requireEncryptionKey()
@@ -226,6 +257,33 @@ class DeviceRfCodeRepository(
         val deviceId: UUID,
         val publicId: String?
     )
+
+    data class Decrypted433MRecord(
+        val deviceId: UUID,
+        val publicId: String?,
+        val bits: Int,
+        val plaintext: ByteArray
+    ) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as Decrypted433MRecord
+
+            if (deviceId != other.deviceId) return false
+            if (bits != other.bits) return false
+            if (!plaintext.contentEquals(other.plaintext)) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var result = deviceId.hashCode()
+            result = 31 * result + bits
+            result = 31 * result + plaintext.contentHashCode()
+            return result
+        }
+    }
 
     data class CurrentRfCodeRecord(
         val bits: Int,

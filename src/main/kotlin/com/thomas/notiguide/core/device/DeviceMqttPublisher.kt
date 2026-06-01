@@ -132,6 +132,39 @@ class DeviceMqttPublisher(
         )
     }
 
+    suspend fun publishRosterAck(
+        hubPublicId: String,
+        payload: Any
+    ) {
+        publishJson(
+            topic = "${mqttProperties.topicPrefix}/transmitter/hub/$hubPublicId/roster/ack",
+            payload = payload,
+            retained = false
+        )
+    }
+
+    suspend fun publishLabel(
+        hubPublicId: String,
+        payload: Any
+    ) {
+        publishJson(
+            topic = "${mqttProperties.topicPrefix}/transmitter/hub/$hubPublicId/cmd/label",
+            payload = payload,
+            retained = false
+        )
+    }
+
+    suspend fun publishUnpair(
+        hubPublicId: String,
+        payload: Any
+    ) {
+        publishJson(
+            topic = "${mqttProperties.topicPrefix}/transmitter/hub/$hubPublicId/cmd/unpair",
+            payload = payload,
+            retained = false
+        )
+    }
+
     suspend fun clearRetained(
         publicId: String,
         kind: DeviceKind

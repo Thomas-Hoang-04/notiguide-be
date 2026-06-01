@@ -13,7 +13,6 @@ import com.thomas.notiguide.domain.device.types.DeviceActivationStatus
 import com.thomas.notiguide.domain.device.repository.DeviceRepository
 import com.thomas.notiguide.domain.device.repository.DeviceRfCodeRepository
 import com.thomas.notiguide.domain.device.types.DeviceFamily
-import com.thomas.notiguide.domain.device.types.DeviceHardwareModel
 import com.thomas.notiguide.domain.device.types.DeviceKind
 import com.thomas.notiguide.domain.device.types.DeviceStatus
 import kotlinx.coroutines.reactor.awaitSingle
@@ -84,7 +83,6 @@ class DeviceRegistrationService(
                 id = existing?.id,
                 publicId = null,
                 publicKeyDer = registration.publicKeyDer,
-                hardwareModel = registration.hardwareModel,
                 kind = registration.kind,
                 status = DeviceStatus.PENDING,
                 assignedName = existing?.assignedName,
@@ -142,20 +140,14 @@ class DeviceRegistrationService(
             return null
         }
 
-        val hardwareModel = runCatching { DeviceHardwareModel.fromWireValue(request.hardwareModel) }.getOrNull()
         val kind = runCatching { DeviceKind.valueOf(request.receiverType) }.getOrNull()
-        if (hardwareModel == null || kind == null || kind == DeviceKind.TRANSMITTER_HUB || kind == DeviceKind.RECEIVER_433M_PASSIVE) {
-            deviceMqttPublisher.publishRejected(DeviceFamily.RECEIVER, challengeId, "model_radio_mismatch")
-            return null
-        }
-        if (!isLegalHardwarePair(hardwareModel, kind)) {
+        if (kind == null || kind == DeviceKind.TRANSMITTER_HUB || kind == DeviceKind.RECEIVER_433M_PASSIVE) {
             deviceMqttPublisher.publishRejected(DeviceFamily.RECEIVER, challengeId, "model_radio_mismatch")
             return null
         }
 
         val publicKeyDer = decodePublicKeyDer(request.publicKeyB64) ?: return null
         return ParsedRegistration(
-            hardwareModel = hardwareModel,
             kind = kind,
             firmwareVersion = request.firmwareVersion.trim(),
             publicKeyDer = publicKeyDer,
@@ -180,16 +172,14 @@ class DeviceRegistrationService(
             return null
         }
 
-        val hardwareModel = runCatching { DeviceHardwareModel.fromWireValue(request.hardwareModel) }.getOrNull()
         val kind = runCatching { DeviceKind.valueOf(request.kind) }.getOrNull()
-        if (hardwareModel == null || kind != DeviceKind.TRANSMITTER_HUB || !isLegalHardwarePair(hardwareModel, DeviceKind.TRANSMITTER_HUB)) {
+        if (kind != DeviceKind.TRANSMITTER_HUB) {
             deviceMqttPublisher.publishRejected(DeviceFamily.TRANSMITTER, challengeId, "model_radio_mismatch")
             return null
         }
 
         val publicKeyDer = decodePublicKeyDer(request.publicKeyB64) ?: return null
         return ParsedRegistration(
-            hardwareModel = hardwareModel,
             kind = DeviceKind.TRANSMITTER_HUB,
             firmwareVersion = request.firmwareVersion.trim(),
             publicKeyDer = publicKeyDer,
@@ -249,19 +239,6 @@ class DeviceRegistrationService(
         return decoded.size >= 8
     }
 
-    private fun isLegalHardwarePair(
-        hardwareModel: DeviceHardwareModel,
-        kind: DeviceKind
-    ): Boolean = when (hardwareModel) {
-        DeviceHardwareModel.ESP_01 -> kind == DeviceKind.RECEIVER_433M
-        DeviceHardwareModel.ESP32_C3 -> kind in setOf(
-            DeviceKind.RECEIVER_433M,
-            DeviceKind.RECEIVER_2_4G,
-            DeviceKind.TRANSMITTER_HUB
-        )
-        DeviceHardwareModel.PT2272 -> kind == DeviceKind.RECEIVER_433M_PASSIVE
-    }
-
     private fun sha256Hex(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-256")
             .digest(bytes)
@@ -269,7 +246,6 @@ class DeviceRegistrationService(
 }
 
 private data class ParsedRegistration(
-    val hardwareModel: DeviceHardwareModel,
     val kind: DeviceKind,
     val firmwareVersion: String,
     val publicKeyDer: ByteArray,
@@ -282,7 +258,6 @@ private data class ParsedRegistration(
 
         other as ParsedRegistration
 
-        if (hardwareModel != other.hardwareModel) return false
         if (kind != other.kind) return false
         if (firmwareVersion != other.firmwareVersion) return false
         if (!publicKeyDer.contentEquals(other.publicKeyDer)) return false
@@ -293,8 +268,7 @@ private data class ParsedRegistration(
     }
 
     override fun hashCode(): Int {
-        var result = hardwareModel.hashCode()
-        result = 31 * result + kind.hashCode()
+        var result = kind.hashCode()
         result = 31 * result + firmwareVersion.hashCode()
         result = 31 * result + publicKeyDer.contentHashCode()
         result = 31 * result + enrollmentToken.hashCode()

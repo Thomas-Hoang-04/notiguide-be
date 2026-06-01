@@ -57,4 +57,15 @@ interface DeviceRepository : CoroutineCrudRepository<Device, UUID> {
         """
     )
     fun findActiveHubsByStore(storeId: UUID): Flow<Device>
+
+    @Query(
+        """
+        SELECT * FROM device
+        WHERE store_id = :storeId
+          AND kind = 'TRANSMITTER_HUB'
+          AND status = 'ACTIVE'
+        LIMIT 1
+        """
+    )
+    suspend fun findActiveHubByStore(storeId: UUID): Device?
 }

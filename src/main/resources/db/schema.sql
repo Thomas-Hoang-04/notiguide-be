@@ -28,11 +28,6 @@ CREATE TYPE device_kind AS ENUM (
     'RECEIVER_2_4G',
     'TRANSMITTER_HUB'
 );
-CREATE TYPE device_hardware_model AS ENUM (
-    'ESP_01',
-    'ESP32_C3',
-    'PT2272'
-);
 CREATE TYPE device_status AS ENUM (
     'PENDING',
     'PENDING_RF_CODE',
@@ -102,7 +97,6 @@ CREATE TABLE device (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     public_id VARCHAR(32),
     public_key_der BYTEA,
-    hardware_model device_hardware_model NOT NULL,
     kind device_kind NOT NULL,
     status device_status NOT NULL DEFAULT 'PENDING',
     assigned_name VARCHAR(100),
@@ -110,6 +104,8 @@ CREATE TABLE device (
     firmware_version VARCHAR(32),
     last_seen_at TIMESTAMP WITH TIME ZONE,
     activated_at TIMESTAMP WITH TIME ZONE,
+    hub_slot SMALLINT,
+    last_roster_seq INT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

@@ -65,6 +65,9 @@ class DeviceLifecycleService(
         if (device.kind.isPassive()) {
             val saved = deviceRepository.save(device.copy(status = action.targetStatus()))
             redis.delete(RedisKeyManager.deviceLifecycleCommand(saved.id!!)).awaitSingleOrNull()
+            if (action == DeviceLifecycleAction.DECOMMISSION) {
+                publishUnpairIfHubPaired(device)
+            }
             return deviceQueryService.getRequiredDeviceDetailById(saved.id)
         }
 
@@ -225,12 +228,25 @@ class DeviceLifecycleService(
                 publicId = requireNotNull(device.publicId),
                 kind = device.kind
             )
+            publishUnpairIfHubPaired(device)
         }
 
         if (saved.kind.isHub() &&
             action in setOf(DeviceLifecycleAction.SUSPEND, DeviceLifecycleAction.DECOMMISSION)
         ) {
             saved.storeId?.let { redis.delete(RedisKeyManager.storeTransmitterActive(it)).awaitSingleOrNull() }
+        }
+    }
+
+    private suspend fun publishUnpairIfHubPaired(device: Device) {
+        if (device.hubSlot != null && device.storeId != null) {
+            val hub = deviceRepository.findActiveHubByStore(device.storeId)
+            if (hub?.publicId != null) {
+                publisherProvider.ifAvailable?.publishUnpair(
+                    hub.publicId,
+                    UnpairEnvelope(slot = device.hubSlot.toInt())
+                )
+            }
         }
     }
 
@@ -287,6 +303,12 @@ private data class LifecycleCommandEnvelope(
     val issuedAt: String,
     @field:JsonProperty("signature_b64")
     val signatureB64: String
+)
+
+private data class UnpairEnvelope(
+    @field:JsonProperty("schema_version")
+    val schemaVersion: Int = 1,
+    val slot: Int
 )
 
 private data class LifecycleAckEnvelope(

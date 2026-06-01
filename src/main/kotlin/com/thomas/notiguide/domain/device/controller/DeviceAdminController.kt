@@ -8,6 +8,7 @@ import com.thomas.notiguide.domain.device.response.DeviceListResponse
 import com.thomas.notiguide.domain.device.request.ApproveDeviceRequest
 import com.thomas.notiguide.domain.device.request.DeviceLifecycleRequest
 import com.thomas.notiguide.domain.device.request.PassiveDeviceRegistrationRequest
+import com.thomas.notiguide.domain.device.request.RenameDeviceRequest
 import com.thomas.notiguide.domain.device.request.RotateRfCodeRequest
 import com.thomas.notiguide.domain.device.request.DeviceDiagnosticsRelayRequest
 import com.thomas.notiguide.domain.device.request.UsbDispatchPayloadRequest
@@ -28,6 +29,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -82,6 +84,14 @@ class DeviceAdminController(
         }
         return ResponseEntity.ok(device)
     }
+
+    @PatchMapping("/{id}/name")
+    suspend fun renameDevice(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: RenameDeviceRequest,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<DeviceDetailDto> =
+        ResponseEntity.ok(deviceQueryService.renameDevice(id, request, principal))
 
     @PostMapping("/passive")
     suspend fun registerPassiveDevice(

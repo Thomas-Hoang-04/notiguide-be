@@ -9,7 +9,6 @@ import com.thomas.notiguide.domain.device.entity.Device
 import com.thomas.notiguide.domain.device.repository.DeviceRepository
 import com.thomas.notiguide.domain.device.repository.DeviceRfCodeRepository
 import com.thomas.notiguide.domain.device.request.PassiveDeviceRegistrationRequest
-import com.thomas.notiguide.domain.device.types.DeviceHardwareModel
 import com.thomas.notiguide.domain.device.types.DeviceKind
 import com.thomas.notiguide.domain.device.types.DeviceRfAckStatus
 import com.thomas.notiguide.domain.device.types.DeviceStatus
@@ -41,8 +40,8 @@ class PassiveDeviceRegistrationService(
         storeRepository.findById(request.storeId)
             ?: throw NotFoundException("Store", "id", request.storeId.toString())
 
-        if (request.hardwareModel != DeviceHardwareModel.PT2272 || request.kind != DeviceKind.RECEIVER_433M_PASSIVE) {
-            throw IllegalArgumentException("Passive device registration only supports the (PT2272, RECEIVER_433M_PASSIVE) pairing")
+        if (request.kind != DeviceKind.RECEIVER_433M_PASSIVE) {
+            throw IllegalArgumentException("Passive device registration only supports RECEIVER_433M_PASSIVE")
         }
 
         if (request.rfCodeBits != 16) {
@@ -64,7 +63,11 @@ class PassiveDeviceRegistrationService(
         rfCodeValidator.validate(DeviceKind.RECEIVER_433M_PASSIVE, request.rfCodeBits, plaintext)
         rfCodeForbiddenSet.assertAllowed(DeviceKind.RECEIVER_433M_PASSIVE, request.rfCodeBits, plaintext)
 
-        val collision = deviceRfCodeRepository.findCollision(DeviceKind.RECEIVER_433M_PASSIVE, request.storeId, plaintext)
+        val collision = deviceRfCodeRepository.findMaskedCollision(
+            storeId = request.storeId,
+            candidatePlaintext = plaintext,
+            candidateBits = request.rfCodeBits
+        )
         if (collision != null) {
             throw PassiveDeviceConflictException(collision.publicId ?: collision.deviceId.toString())
         }
@@ -74,7 +77,6 @@ class PassiveDeviceRegistrationService(
             Device(
                 publicId = devicePublicIdMinter.mint(DeviceKind.RECEIVER_433M_PASSIVE),
                 publicKeyDer = null,
-                hardwareModel = DeviceHardwareModel.PT2272,
                 kind = DeviceKind.RECEIVER_433M_PASSIVE,
                 status = DeviceStatus.ACTIVE,
                 assignedName = request.assignedName.trim(),

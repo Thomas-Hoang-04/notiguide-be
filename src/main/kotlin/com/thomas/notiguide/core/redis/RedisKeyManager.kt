@@ -28,6 +28,7 @@ object RedisKeyManager {
     fun deviceHubAlive(deviceId: UUID) = "device:hub:alive:$deviceId"
     fun deviceHubDiagnostics(deviceId: UUID) = "device:hub:diag:$deviceId"
     fun storeTransmitterActive(storeId: UUID) = "store:$storeId:transmitter:active"
+    fun dispatchTracking(dispatchId: UUID): String = "dispatch:tracking:$dispatchId"
 
     fun queueState(storeId: UUID) = "store:$storeId:queue_state"
     fun storeSettings(storeId: UUID) = "store:$storeId:settings"

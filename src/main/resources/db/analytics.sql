@@ -10,7 +10,8 @@ DELETE FROM analytics_event
 WHERE store_id IN (
     '269de397-63d4-4724-b0f2-29dd57a105bd'::uuid,
     '12e4189b-7ac8-4ea0-8bb4-5df4cb4d14de'::uuid,
-    'bafca564-bf44-4717-a886-46debe727aed'::uuid
+    'bafca564-bf44-4717-a886-46debe727aed'::uuid,
+    '61e2c9d6-e8b6-4f4f-9d88-4755636777bf'::uuid
 );
 
 WITH store_profiles AS (
@@ -61,6 +62,21 @@ WITH store_profiles AS (
                 15,   -- peak_hour_2 (mid-afternoon)
                 8,
                 20
+            ),
+            -- SOICT Coffee: high-traffic student café near school, long hours, fast service
+            (
+                '61e2c9d6-e8b6-4f4f-9d88-4755636777bf'::uuid,
+                '1ab61855-0aaa-4499-8930-47672bf32a35'::text,
+                60,   -- base_daily_tickets (high student traffic)
+                85,   -- completed_pct (students wait nearby)
+                8,    -- cancelled_pct (low — captive audience)
+                7,    -- skipped_pct
+                150,  -- base_wait_sec (~2.5 min avg, fast turnover)
+                200,  -- base_service_sec (~3.3 min avg, simple drinks)
+                10,   -- peak_hour_1 (mid-morning class break)
+                18,   -- peak_hour_2 (after-class evening rush)
+                7,    -- open_hour
+                22    -- close_hour (late for evening study sessions)
             )
     ) AS v(
         store_id, counter_id,
@@ -78,7 +94,7 @@ days AS (
         gs.day_offset,
         ((now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - gs.day_offset) AS business_day
     FROM store_profiles sp
-    CROSS JOIN generate_series(0, 180) AS gs(day_offset)
+    CROSS JOIN generate_series(0, 360) AS gs(day_offset)
 ),
 
 -- Per-day volume with realistic variance:

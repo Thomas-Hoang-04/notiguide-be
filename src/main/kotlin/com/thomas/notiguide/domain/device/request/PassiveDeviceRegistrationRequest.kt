@@ -1,6 +1,5 @@
 package com.thomas.notiguide.domain.device.request
 
-import com.thomas.notiguide.domain.device.types.DeviceHardwareModel
 import com.thomas.notiguide.domain.device.types.DeviceKind
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
@@ -8,9 +7,6 @@ import jakarta.validation.constraints.Size
 import java.util.UUID
 
 data class PassiveDeviceRegistrationRequest(
-    @field:NotNull
-    val hardwareModel: DeviceHardwareModel,
-
     @field:NotNull
     val kind: DeviceKind,
 

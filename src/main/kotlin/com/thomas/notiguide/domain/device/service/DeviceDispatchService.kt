@@ -126,7 +126,7 @@ class DeviceDispatchService(
         device.storeId == storeId &&
             !device.kind.isHub() &&
             device.status == DeviceStatus.ACTIVE &&
-            device.rfCode != null
+            (device.rfCode != null || device.hubSlot != null)
 
     private suspend fun isBusy(deviceId: UUID): Boolean =
         redis.hasKey(RedisKeyManager.deviceBusy(deviceId)).awaitSingle()

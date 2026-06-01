@@ -1,7 +1,12 @@
 package com.thomas.notiguide.domain.device.service
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.thomas.notiguide.core.device.DeviceMqttPublisher
+import com.thomas.notiguide.core.exception.ForbiddenException
+import com.thomas.notiguide.core.exception.NotFoundException
 import com.thomas.notiguide.core.redis.RedisKeyManager
+import com.thomas.notiguide.domain.admin.types.AdminRole
 import com.thomas.notiguide.domain.device.dto.BoundTicketDto
 import com.thomas.notiguide.domain.device.dto.DeviceDetailDto
 import com.thomas.notiguide.domain.device.dto.DeviceDto
@@ -12,14 +17,18 @@ import com.thomas.notiguide.domain.device.dto.DeviceRfCodeSummaryDto
 import com.thomas.notiguide.domain.device.redis.DeviceBusyRecord
 import com.thomas.notiguide.domain.device.redis.DeviceLifecycleCommandRecord
 import com.thomas.notiguide.domain.device.redis.TransmitterActiveRecord
-import com.thomas.notiguide.domain.device.types.DeviceHardwareModel
+import com.thomas.notiguide.domain.device.repository.DeviceRepository
+import com.thomas.notiguide.domain.device.request.RenameDeviceRequest
 import com.thomas.notiguide.domain.device.types.DeviceKind
 import com.thomas.notiguide.domain.device.types.DeviceRfAckStatus
 import com.thomas.notiguide.domain.device.types.DeviceStatus
+import com.thomas.notiguide.shared.principal.AdminPrincipal
+import com.thomas.notiguide.shared.principal.StoreAccessUtil
 import io.r2dbc.spi.Readable
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.reactive.asFlow
 import kotlinx.coroutines.reactor.awaitSingleOrNull
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.data.redis.core.ReactiveRedisTemplate
 import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.stereotype.Service
@@ -31,7 +40,9 @@ class DeviceQueryService(
     private val client: DatabaseClient,
     private val redis: ReactiveRedisTemplate<String, String>,
     private val objectMapper: ObjectMapper,
-    private val hubDiagnosticsService: HubDiagnosticsService
+    private val hubDiagnosticsService: HubDiagnosticsService,
+    private val deviceRepository: DeviceRepository,
+    private val publisherProvider: ObjectProvider<DeviceMqttPublisher>
 ) {
 
     suspend fun listDevices(
@@ -44,7 +55,6 @@ class DeviceQueryService(
             SELECT
                 d.id,
                 d.public_id,
-                d.hardware_model,
                 d.kind,
                 d.status,
                 d.assigned_name,
@@ -55,6 +65,7 @@ class DeviceQueryService(
                 d.activated_at,
                 d.created_at,
                 d.updated_at,
+                d.hub_slot,
                 r.bits AS rf_bits,
                 r.byte_len AS rf_byte_len,
                 r.version AS rf_version,
@@ -161,7 +172,6 @@ class DeviceQueryService(
             SELECT
                 d.id,
                 d.public_id,
-                d.hardware_model,
                 d.kind,
                 d.status,
                 d.assigned_name,
@@ -172,6 +182,7 @@ class DeviceQueryService(
                 d.activated_at,
                 d.created_at,
                 d.updated_at,
+                d.hub_slot,
                 r.bits AS rf_bits,
                 r.byte_len AS rf_byte_len,
                 r.version AS rf_version,
@@ -210,11 +221,42 @@ class DeviceQueryService(
         )
     }
 
+    suspend fun renameDevice(
+        deviceId: UUID,
+        request: RenameDeviceRequest,
+        principal: AdminPrincipal
+    ): DeviceDetailDto {
+        val device = deviceRepository.findById(deviceId)
+            ?: throw NotFoundException("Device", "id", deviceId.toString())
+        if (!isSuperAdmin(principal)) {
+            val storeId = device.storeId
+                ?: throw ForbiddenException("Store-scoped admins need an assigned store to rename devices")
+            StoreAccessUtil.requireStoreAccess(principal, storeId)
+        }
+
+        val newName = request.assignedName.trim()
+        deviceRepository.save(device.copy(assignedName = newName))
+
+        if (device.hubSlot != null && device.storeId != null) {
+            val hub = deviceRepository.findActiveHubByStore(device.storeId)
+            if (hub?.publicId != null) {
+                publisherProvider.ifAvailable?.publishLabel(
+                    hub.publicId,
+                    LabelEnvelope(slot = device.hubSlot.toInt(), label = newName)
+                )
+            }
+        }
+
+        return getRequiredDeviceDetailById(deviceId)
+    }
+
+    private fun isSuperAdmin(principal: AdminPrincipal): Boolean =
+        principal.authorities.any { it.authority == AdminRole.ROLE_SUPER_ADMIN.name }
+
     private fun mapRow(row: Readable): DeviceRow = DeviceRow(
         device = DeviceDto(
             id = row.get("id", UUID::class.java)!!,
             publicId = row.get("public_id", String::class.java),
-            hardwareModel = row.get("hardware_model", DeviceHardwareModel::class.java)!!,
             kind = row.get("kind", DeviceKind::class.java)!!,
             status = row.get("status", DeviceStatus::class.java)!!,
             assignedName = row.get("assigned_name", String::class.java),
@@ -225,6 +267,7 @@ class DeviceQueryService(
             activatedAt = row.get("activated_at", OffsetDateTime::class.java),
             createdAt = row.get("created_at", OffsetDateTime::class.java),
             updatedAt = row.get("updated_at", OffsetDateTime::class.java),
+            hubSlot = row.get("hub_slot", Short::class.javaObjectType),
             rfCode = row.get("rf_version", Int::class.javaObjectType)?.let {
                 DeviceRfCodeSummaryDto(
                     bits = row.get("rf_bits", Short::class.java)!!.toInt(),
@@ -249,7 +292,6 @@ private fun DeviceDto.toDetail(
     DeviceDetailDto(
         id = id,
         publicId = publicId,
-        hardwareModel = hardwareModel,
         kind = kind,
         status = status,
         assignedName = assignedName,
@@ -260,6 +302,7 @@ private fun DeviceDto.toDetail(
         activatedAt = activatedAt,
         createdAt = createdAt,
         updatedAt = updatedAt,
+        hubSlot = hubSlot,
         rfCode = rfCode,
         lifecycleCommand = lifecycleCommand,
         isElected = isElected,
@@ -270,6 +313,13 @@ private fun DeviceDto.toDetail(
 private data class DeviceRow(
     val device: DeviceDto,
     val registeredCount: Long?
+)
+
+private data class LabelEnvelope(
+    @field:JsonProperty("schema_version")
+    val schemaVersion: Int = 1,
+    val slot: Int,
+    val label: String
 )
 
 private fun <T> DatabaseClient.GenericExecuteSpec.bindNullable(
