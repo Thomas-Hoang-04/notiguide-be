@@ -3,7 +3,7 @@ package com.thomas.notiguide.domain.store.controller
 import com.thomas.notiguide.core.exception.ForbiddenException
 import com.thomas.notiguide.domain.admin.types.AdminRole
 import com.thomas.notiguide.domain.store.dto.StoreDto
-import com.thomas.notiguide.domain.store.dto.StorePageResponse
+import com.thomas.notiguide.domain.store.response.StorePageResponse
 import com.thomas.notiguide.domain.store.dto.StoreSettingsDto
 import com.thomas.notiguide.domain.store.request.CreateStoreRequest
 import com.thomas.notiguide.domain.store.request.UpdateStoreRequest

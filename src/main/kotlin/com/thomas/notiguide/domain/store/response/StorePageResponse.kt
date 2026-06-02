@@ -1,4 +1,6 @@
-package com.thomas.notiguide.domain.store.dto
+package com.thomas.notiguide.domain.store.response
+
+import com.thomas.notiguide.domain.store.dto.StoreDto
 
 data class StorePageResponse(
     val items: List<StoreDto>,

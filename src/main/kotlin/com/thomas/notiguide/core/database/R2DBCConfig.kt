@@ -5,6 +5,7 @@ import com.thomas.notiguide.domain.admin.types.AdminRole
 import com.thomas.notiguide.domain.device.types.DeviceKind
 import com.thomas.notiguide.domain.device.types.DeviceRfAckStatus
 import com.thomas.notiguide.domain.device.types.DeviceStatus
+import com.thomas.notiguide.domain.store.types.SlugStatus
 import com.thomas.notiguide.shared.principal.AdminPrincipal
 import io.r2dbc.pool.ConnectionPool
 import io.r2dbc.pool.ConnectionPoolConfiguration
@@ -86,6 +87,7 @@ class R2DBCConfig(
                     .withEnum("device_kind", DeviceKind::class.java)
                     .withEnum("device_status", DeviceStatus::class.java)
                     .withEnum("device_rf_ack_status", DeviceRfAckStatus::class.java)
+                    .withEnum("slug_status", SlugStatus::class.java)
                     .build()
             )
             .build()
@@ -118,7 +120,8 @@ class R2DBCConfig(
         AdminRoleWriteConverter,
         DeviceKindWriteConverter,
         DeviceStatusWriteConverter,
-        DeviceRfAckStatusWriteConverter
+        DeviceRfAckStatusWriteConverter,
+        SlugStatusWriteConverter
     )
 
     @WritingConverter
@@ -132,6 +135,9 @@ class R2DBCConfig(
 
     @WritingConverter
     object DeviceRfAckStatusWriteConverter : EnumWriteSupport<DeviceRfAckStatus>()
+
+    @WritingConverter
+    object SlugStatusWriteConverter : EnumWriteSupport<SlugStatus>()
 
     private class LoggingConnectionFactory(
         private val delegate: ConnectionFactory,

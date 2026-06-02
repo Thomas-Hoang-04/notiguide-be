@@ -50,7 +50,7 @@ dependencies {
     testImplementation("org.springframework.security:spring-security-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
-    implementation("org.bouncycastle:bcpkix-jdk18on:1.83")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.84")
     implementation("com.auth0:java-jwt:4.5.1")
     implementation("me.paulschwarz:spring-dotenv:5.1.0")
     implementation("org.eclipse.paho:org.eclipse.paho.mqttv5.client:1.2.5")

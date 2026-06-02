@@ -297,25 +297,23 @@ class AnalyticsQueryService(
     private fun periodToRange(period: Period): Pair<OffsetDateTime, OffsetDateTime> {
         val now = OffsetDateTime.now(storeTimezone)
         val today = LocalDate.now(storeTimezone)
-        val to = now
         val from = when (period) {
             Period.TODAY -> today.atStartOfDay(storeTimezone).toOffsetDateTime()
             Period.WEEK -> today.minusDays(7).atStartOfDay(storeTimezone).toOffsetDateTime()
             Period.MONTH -> today.minusDays(30).atStartOfDay(storeTimezone).toOffsetDateTime()
             Period.QUARTER -> today.minusDays(90).atStartOfDay(storeTimezone).toOffsetDateTime()
         }
-        return from to to
+        return from to now
     }
 
     private fun rangeToRange(range: Range): Pair<OffsetDateTime, OffsetDateTime> {
         val now = OffsetDateTime.now(storeTimezone)
         val today = LocalDate.now(storeTimezone)
-        val to = now
         val from = when (range) {
             Range.D7 -> today.minusDays(7).atStartOfDay(storeTimezone).toOffsetDateTime()
             Range.D30 -> today.minusDays(30).atStartOfDay(storeTimezone).toOffsetDateTime()
             Range.D90 -> today.minusDays(90).atStartOfDay(storeTimezone).toOffsetDateTime()
         }
-        return from to to
+        return from to now
     }
 }

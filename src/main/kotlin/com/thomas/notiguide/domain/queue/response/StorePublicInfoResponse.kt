@@ -6,5 +6,7 @@ data class StorePublicInfoResponse(
     val address: String?,
     val isActive: Boolean,
     val queueState: String = "ACTIVE",
-    val maxQueueSize: Int = 0
+    val maxQueueSize: Int = 0,
+    val canonicalId: String = "",
+    val matchedSlug: String = ""
 )

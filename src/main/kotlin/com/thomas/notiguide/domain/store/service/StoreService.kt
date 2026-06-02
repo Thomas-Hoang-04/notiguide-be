@@ -7,12 +7,13 @@ import com.thomas.notiguide.domain.admin.repository.AdminRepository
 import com.thomas.notiguide.domain.queue.repository.RedisQueueRepository
 import com.thomas.notiguide.domain.queue.service.QueueService
 import com.thomas.notiguide.domain.store.dto.StoreDto
-import com.thomas.notiguide.domain.store.dto.StorePageResponse
+import com.thomas.notiguide.domain.store.response.StorePageResponse
 import com.thomas.notiguide.domain.store.dto.StoreSettingsDto
 import com.thomas.notiguide.domain.store.entity.ServiceType
 import com.thomas.notiguide.domain.store.entity.Store
 import com.thomas.notiguide.domain.store.entity.StoreSettings
 import com.thomas.notiguide.domain.store.repository.ServiceTypeRepository
+import com.thomas.notiguide.domain.store.repository.StorePublicIdRepository
 import com.thomas.notiguide.domain.store.repository.StoreRepository
 import com.thomas.notiguide.domain.store.repository.StoreSettingsRepository
 import com.thomas.notiguide.domain.store.request.CreateStoreRequest
@@ -29,6 +30,7 @@ import java.util.UUID
 @Service
 class StoreService(
     private val storeRepository: StoreRepository,
+    private val storePublicIdRepository: StorePublicIdRepository,
     private val adminRepository: AdminRepository,
     private val redisQueueRepository: RedisQueueRepository,
     private val queueService: QueueService,
@@ -70,17 +72,28 @@ class StoreService(
         return store.toDto()
     }
 
-    @Transactional(readOnly = true)
-    suspend fun getStoreByPublicId(publicId: String): StoreDto {
-        val normalizedId = publicId.trim()
+    data class StoreResolution(val store: StoreDto, val matchedSlug: String, val isDefault: Boolean)
 
-        val store = storeRepository.findByPublicId(normalizedId)
-            ?: runCatching { UUID.fromString(normalizedId) }
-                .getOrNull()
-                ?.let { storeRepository.findById(it) }
-            ?: throw NotFoundException("Store", "publicId", publicId)
-        return store.toDto()
+    @Transactional(readOnly = true)
+    suspend fun resolvePublicId(input: String): StoreResolution? {
+        val normalized = input.trim()
+
+        storePublicIdRepository.findResolvableBySlug(normalized)?.let { row ->
+            val store = storeRepository.findById(row.storeId) ?: return null
+            return StoreResolution(store.toDto(), row.slug, row.isDefault)
+        }
+
+        runCatching { UUID.fromString(normalized) }.getOrNull()
+            ?.let { storeRepository.findById(it) }
+            ?.let { return StoreResolution(it.toDto(), it.publicId!!, true) }
+
+        return null
     }
+
+    @Transactional(readOnly = true)
+    suspend fun getStoreByPublicId(publicId: String): StoreDto =
+        resolvePublicId(publicId)?.store
+            ?: throw NotFoundException("Store", "publicId", publicId)
 
     @Transactional
     suspend fun createStore(request: CreateStoreRequest): StoreDto {

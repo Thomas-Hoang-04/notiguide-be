@@ -44,6 +44,6 @@ out/
 NOTES.txt
 docs/
 **/rsa/**
-notiguide/
+notiguide-prod/
 !src/test/kotlin/com/thomas/notiguide/
 !src/test/kotlin/com/thomas/notiguide/**

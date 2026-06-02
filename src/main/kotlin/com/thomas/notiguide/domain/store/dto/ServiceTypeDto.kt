@@ -12,8 +12,3 @@ data class ServiceTypeDto(
     val updatedAt: OffsetDateTime?
 )
 
-data class ServiceTypePublicDto(
-    val id: String,
-    val name: String,
-    val prefix: String
-)

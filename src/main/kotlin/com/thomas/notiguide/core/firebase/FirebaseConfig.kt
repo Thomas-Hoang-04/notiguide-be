@@ -12,7 +12,7 @@ import org.springframework.core.io.ResourceLoader
 import java.io.InputStream
 
 @Configuration
-@ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText('\${firebase.credentials-path:}')")
+@ConditionalOnExpression($$"T(org.springframework.util.StringUtils).hasText('${firebase.credentials-path:}')")
 class FirebaseConfig(
     private val props: FirebaseProperties,
     private val resourceLoader: ResourceLoader

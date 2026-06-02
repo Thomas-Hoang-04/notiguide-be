@@ -9,7 +9,7 @@ import org.springframework.core.io.ResourceLoader
 class DeviceCommandSigningConfig {
 
     @Bean
-    @ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText('\${device.command-signing.pk:}')")
+    @ConditionalOnExpression($$"T(org.springframework.util.StringUtils).hasText('${device.command-signing.pk:}')")
     fun deviceCommandSigner(
         properties: DeviceCommandSigningProperties,
         resourceLoader: ResourceLoader

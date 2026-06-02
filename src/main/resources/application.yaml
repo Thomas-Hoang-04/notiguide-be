@@ -39,5 +39,11 @@ device:
     active-cache-seconds: 60
     max-registered-per-store: 3
 
+store:
+  slug:
+    grace-period-days: 30
+    grace-delete-task-delay-ms: 21600000
+
 app:
   timezone: Asia/Ho_Chi_Minh
+

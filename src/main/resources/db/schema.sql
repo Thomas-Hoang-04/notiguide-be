@@ -48,11 +48,26 @@ DECLARE
     candidate TEXT;
 BEGIN
     LOOP
-        -- 6 random bytes → 8 base64 chars; strip non-alphanumeric padding chars
+        -- 6 random bytes → 8 base64 chars; strip non-alphanumeric padding chars.
         candidate := regexp_replace(encode(gen_random_bytes(6), 'base64'), '[^A-Za-z0-9]', '', 'g');
-        -- base64 of 6 bytes is always 8 chars but may contain +/= — keep looping until clean 8 chars
+
+        -- base64 of 6 bytes is always 8 chars but may contain +/=; keep looping until clean 8 chars.
         IF length(candidate) = 8 THEN
-            RETURN candidate;
+            IF to_regclass('store_public_id') IS NULL THEN
+                IF NOT EXISTS (
+                    SELECT 1 FROM store WHERE lower(public_id) = lower(candidate)
+                ) THEN
+                    RETURN candidate;
+                END IF;
+            ELSE
+                IF NOT EXISTS (
+                    SELECT 1 FROM store WHERE lower(public_id) = lower(candidate)
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM store_public_id WHERE lower(slug) = lower(candidate)
+                ) THEN
+                    RETURN candidate;
+                END IF;
+            END IF;
         END IF;
     END LOOP;
 END;
@@ -71,6 +86,46 @@ CREATE TABLE store (
 );
 
 CREATE INDEX idx_store_public_id ON store(public_id);
+
+-- ===== Custom store slugs =====
+CREATE TYPE slug_status AS ENUM ('ACTIVE', 'GRACE');
+
+CREATE TABLE store_public_id (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    store_id    UUID NOT NULL REFERENCES store(id) ON DELETE CASCADE,
+    slug        VARCHAR(128) NOT NULL,
+    is_default  BOOLEAN NOT NULL DEFAULT FALSE,
+    status      slug_status NOT NULL DEFAULT 'ACTIVE',
+    retired_at  TIMESTAMP WITH TIME ZONE,
+    expires_at  TIMESTAMP WITH TIME ZONE,
+    created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_default_active   CHECK (NOT is_default OR status = 'ACTIVE'),
+    CONSTRAINT chk_grace_timestamps CHECK (
+        (status = 'GRACE' AND retired_at IS NOT NULL AND expires_at IS NOT NULL)
+        OR (status = 'ACTIVE' AND retired_at IS NULL AND expires_at IS NULL)
+    )
+);
+
+-- Global uniqueness, case-insensitive — matches the resolver's lower(slug) key.
+CREATE UNIQUE INDEX uq_store_public_id_slug ON store_public_id (lower(slug));
+-- Exactly one default per store.
+CREATE UNIQUE INDEX uq_store_public_id_default ON store_public_id (store_id) WHERE is_default;
+-- Cap counting and purge scans.
+CREATE INDEX idx_store_public_id_store_status ON store_public_id (store_id, status);
+CREATE INDEX idx_store_public_id_expiry ON store_public_id (expires_at) WHERE status = 'GRACE';
+
+-- Mirror each store's default public_id into store_public_id on insert.
+CREATE OR REPLACE FUNCTION mirror_store_default_public_id() RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO store_public_id (store_id, slug, is_default, status)
+    VALUES (NEW.id, NEW.public_id, TRUE, 'ACTIVE');
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_mirror_store_default_public_id
+    AFTER INSERT ON store
+    FOR EACH ROW EXECUTE FUNCTION mirror_store_default_public_id();
 
 CREATE TABLE admin (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

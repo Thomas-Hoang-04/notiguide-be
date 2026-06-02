@@ -64,7 +64,9 @@ class QueuePublicController(
 
     @GetMapping("/info")
     suspend fun getStoreInfo(@PathVariable publicId: String): StorePublicInfoResponse {
-        val store = storeService.getStoreByPublicId(publicId)
+        val resolution = storeService.resolvePublicId(publicId)
+            ?: throw NotFoundException("Store", "publicId", publicId)
+        val store = resolution.store
         val queueState = queueService.getQueueState(store.id)
         val settings = try {
             storeService.getStoreSettings(store.id)
@@ -75,7 +77,9 @@ class QueuePublicController(
             address = store.address,
             isActive = store.isActive,
             queueState = queueState.name,
-            maxQueueSize = settings?.maxQueueSize ?: 0
+            maxQueueSize = settings?.maxQueueSize ?: 0,
+            canonicalId = store.publicId,
+            matchedSlug = resolution.matchedSlug
         )
     }
 
