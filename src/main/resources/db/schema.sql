@@ -14,6 +14,20 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TYPE admin_role AS ENUM ('ROLE_SUPER_ADMIN', 'ROLE_ADMIN');
+
+-- Organizations: top-level tenant. A SUPER_ADMIN owns exactly one org and
+-- governs every store inside it. Independent stores have org_id = NULL.
+CREATE TABLE organization (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        TEXT NOT NULL,
+    join_code   TEXT NOT NULL,
+    created_by  UUID,  -- FK to admin(id) added at end of file (circular dep)
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX uq_organization_join_code ON organization(join_code);
+
 CREATE TYPE analytics_event_type AS ENUM (
     'TICKET_ISSUED',
     'TICKET_CALLED',
@@ -81,11 +95,15 @@ CREATE TABLE store (
     is_active BOOLEAN DEFAULT TRUE,
     allow_jump_call BOOLEAN DEFAULT FALSE,
     allow_no_show BOOLEAN DEFAULT FALSE,
+    org_id UUID REFERENCES organization(id) ON DELETE RESTRICT,
+    join_code TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_store_public_id ON store(public_id);
+CREATE UNIQUE INDEX uq_store_join_code ON store(join_code) WHERE join_code IS NOT NULL;
+CREATE INDEX idx_store_org ON store(org_id);
 
 -- ===== Custom store slugs =====
 CREATE TYPE slug_status AS ENUM ('ACTIVE', 'GRACE');
@@ -133,20 +151,22 @@ CREATE TABLE admin (
     password_hash VARCHAR(255) NOT NULL,
     role admin_role NOT NULL,
     store_id UUID REFERENCES store(id) ON DELETE RESTRICT,
+    org_id UUID REFERENCES organization(id) ON DELETE RESTRICT,
     is_verified BOOLEAN DEFAULT FALSE,
     created_by UUID REFERENCES admin(id) ON DELETE SET NULL,
     verified_by UUID REFERENCES admin(id) ON DELETE SET NULL,
     verified_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_superadmin_no_store CHECK (
-        (role = 'ROLE_SUPER_ADMIN' AND store_id IS NULL) OR
-        (role = 'ROLE_ADMIN')
+    CONSTRAINT chk_admin_tenancy CHECK (
+        (role = 'ROLE_SUPER_ADMIN' AND org_id IS NOT NULL AND store_id IS NULL) OR
+        (role = 'ROLE_ADMIN' AND org_id IS NULL)
     )
 );
 
 CREATE UNIQUE INDEX idx_admin_username_lower ON admin(LOWER(username));
 CREATE INDEX idx_admin_store ON admin(store_id);
+CREATE INDEX idx_admin_org ON admin(org_id);
 
 CREATE TABLE device (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -317,3 +337,9 @@ CREATE TABLE service_type (
 );
 
 CREATE INDEX idx_service_type_store ON service_type (store_id);
+
+-- Deferred FK: breaks the circular dependency between organization and admin
+-- (organization.created_by → admin.id; admin.org_id → organization.id)
+ALTER TABLE organization
+    ADD CONSTRAINT fk_organization_created_by
+    FOREIGN KEY (created_by) REFERENCES admin(id) ON DELETE SET NULL;

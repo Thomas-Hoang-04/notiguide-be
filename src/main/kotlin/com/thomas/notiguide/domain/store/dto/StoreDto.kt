@@ -6,6 +6,7 @@ import java.util.UUID
 data class StoreDto(
     val id: UUID,
     val publicId: String,
+    val orgId: UUID?,
     val name: String,
     val address: String?,
     val isActive: Boolean,

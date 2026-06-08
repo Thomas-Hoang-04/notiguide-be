@@ -18,6 +18,12 @@ data class Store(
     @Column("public_id")
     val publicId: String? = null,
 
+    @Column("org_id")
+    val orgId: UUID? = null,
+
+    @Column("join_code")
+    val joinCode: String? = null,
+
     @Column("name")
     val name: String,
 
@@ -45,6 +51,7 @@ data class Store(
     fun toDto(): StoreDto = StoreDto(
         id = id!!,
         publicId = publicId!!,
+        orgId = orgId,
         name = name,
         address = address,
         isActive = isActive,

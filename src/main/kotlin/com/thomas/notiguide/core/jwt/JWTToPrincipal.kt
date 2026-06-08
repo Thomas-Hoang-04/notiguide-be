@@ -26,6 +26,7 @@ class JWTToPrincipal(
             _username = admin.username,
             _password = admin.passwordHash,
             _authorities = listOf(SimpleGrantedAuthority(admin.role.name)),
+            orgId = admin.orgId,
             storeId = admin.storeId,
             isVerified = true
         )

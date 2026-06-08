@@ -8,6 +8,7 @@ data class AdminDto(
     val id: UUID,
     val username: String,
     val role: AdminRole,
+    val orgId: UUID?,
     val storeId: UUID?,
     val storeName: String? = null,
     val isVerified: Boolean,

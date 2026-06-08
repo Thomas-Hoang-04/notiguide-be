@@ -28,6 +28,9 @@ data class Admin(
     @Column("role")
     val role: AdminRole = AdminRole.ROLE_ADMIN,
 
+    @Column("org_id")
+    val orgId: UUID? = null,
+
     @Column("store_id")
     val storeId: UUID? = null,
 
@@ -57,6 +60,7 @@ data class Admin(
         id = id!!,
         username = username,
         role = role,
+        orgId = orgId,
         storeId = storeId,
         storeName = storeName,
         isVerified = isVerified,
@@ -72,6 +76,7 @@ data class Admin(
         _username = username,
         _password = passwordHash,
         _authorities = listOf(SimpleGrantedAuthority(role.name)),
+        orgId = orgId,
         storeId = storeId,
         isVerified = isVerified
     )

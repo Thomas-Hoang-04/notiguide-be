@@ -9,6 +9,7 @@ class AdminPrincipal(
     private val _username: String,
     private val _password: String,
     private val _authorities: Collection<GrantedAuthority>,
+    val orgId: UUID?,
     val storeId: UUID?,
     val isVerified: Boolean
 ) : UserDetails {
