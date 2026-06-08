@@ -5,7 +5,7 @@ import com.thomas.notiguide.domain.store.request.CreateServiceTypeRequest
 import com.thomas.notiguide.domain.store.request.UpdateServiceTypeRequest
 import com.thomas.notiguide.domain.store.service.ServiceTypeService
 import com.thomas.notiguide.shared.principal.AdminPrincipal
-import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -23,7 +23,8 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/stores/{storeId}/service-types")
 class ServiceTypeController(
-    private val serviceTypeService: ServiceTypeService
+    private val serviceTypeService: ServiceTypeService,
+    private val storeAccess: StoreAccessService
 ) {
 
     @GetMapping
@@ -31,7 +32,7 @@ class ServiceTypeController(
         @PathVariable storeId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<List<ServiceTypeDto>> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         return ResponseEntity.ok(serviceTypeService.listServiceTypes(storeId))
     }
 
@@ -41,7 +42,7 @@ class ServiceTypeController(
         @Valid @RequestBody request: CreateServiceTypeRequest,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<ServiceTypeDto> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         val dto = serviceTypeService.createServiceType(storeId, request)
         return ResponseEntity.status(HttpStatus.CREATED).body(dto)
     }
@@ -53,7 +54,7 @@ class ServiceTypeController(
         @Valid @RequestBody request: UpdateServiceTypeRequest,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<ServiceTypeDto> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         return ResponseEntity.ok(serviceTypeService.updateServiceType(storeId, id, request))
     }
 
@@ -63,7 +64,7 @@ class ServiceTypeController(
         @PathVariable id: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<Void> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         serviceTypeService.deleteServiceType(storeId, id)
         return ResponseEntity.noContent().build()
     }

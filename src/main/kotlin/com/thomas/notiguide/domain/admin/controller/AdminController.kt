@@ -15,9 +15,10 @@ import com.thomas.notiguide.domain.admin.request.UpdateAdminStoreRequest
 import com.thomas.notiguide.domain.admin.request.UpdatePasswordRequest
 import com.thomas.notiguide.domain.admin.request.UpdateUsernameRequest
 import com.thomas.notiguide.domain.admin.service.AdminService
+import com.thomas.notiguide.domain.admin.service.AdminService.VerifyScope
 import com.thomas.notiguide.domain.admin.service.SessionService
 import com.thomas.notiguide.shared.principal.AdminPrincipal
-import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import jakarta.validation.Valid
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
@@ -42,7 +43,8 @@ class AdminController(
     private val adminService: AdminService,
     private val sessionService: SessionService,
     private val refreshTokenService: RefreshTokenService,
-    private val appProperties: AppProperties
+    private val appProperties: AppProperties,
+    private val storeAccess: StoreAccessService
 ) {
 
     @GetMapping("/me")
@@ -57,7 +59,7 @@ class AdminController(
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<AdminDto> {
         requireSuperAdmin(principal)
-        val dto = adminService.createAdmin(request, principal.id)
+        val dto = adminService.createAdmin(request, principal.id, requireOrgId(principal))
         return ResponseEntity.status(HttpStatus.CREATED).body(dto)
     }
 
@@ -66,8 +68,13 @@ class AdminController(
         @PathVariable id: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<AdminDto> {
-        requireSuperAdmin(principal)
-        val dto = adminService.verifyAdmin(id, principal.id)
+        val dto = if (principal.authorities.any { it.authority == AdminRole.ROLE_SUPER_ADMIN.name }) {
+            adminService.verifyAdmin(id, principal.id, VerifyScope.Org(requireOrgId(principal)))
+        } else {
+            if (!principal.isVerified) throw ForbiddenException("Only a verified admin can verify others")
+            val storeId = principal.storeId ?: throw ForbiddenException("Store-scoped admins need an assigned store")
+            adminService.verifyAdmin(id, principal.id, VerifyScope.IndependentStore(storeId))
+        }
         return ResponseEntity.ok(dto)
     }
 
@@ -102,7 +109,7 @@ class AdminController(
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<AdminDto> {
         requireSuperAdmin(principal)
-        val dto = adminService.updateAdminStore(id, request.storeId)
+        val dto = adminService.updateAdminStore(id, request.storeId, requireOrgId(principal))
         return ResponseEntity.ok(dto)
     }
 
@@ -112,7 +119,7 @@ class AdminController(
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<Void> {
         requireSuperAdmin(principal)
-        adminService.deleteAdmin(id, principal.id)
+        adminService.deleteAdmin(id, principal.id, requireOrgId(principal))
         return ResponseEntity.noContent().build()
     }
 
@@ -190,9 +197,11 @@ class AdminController(
     ): ResponseEntity<AdminPageResponse> {
         val admins = if (storeId == null) {
             requireSuperAdmin(principal)
-            adminService.listAllAdmins(page, size, role)
+            val orgId = principal.orgId
+                ?: throw ForbiddenException("Organization owner has no organization assigned")
+            adminService.listAdminsByOrg(orgId, page, size)
         } else {
-            StoreAccessUtil.requireStoreAccess(principal, storeId)
+            storeAccess.requireStoreAccess(principal, storeId)
             adminService.listAdminsByStore(storeId, page, size, role)
         }
         return ResponseEntity.ok(admins)
@@ -227,4 +236,7 @@ class AdminController(
         if (principal.authorities.none { it.authority == AdminRole.ROLE_SUPER_ADMIN.name })
             throw ForbiddenException("Only elevated admins can perform this action")
     }
+
+    private fun requireOrgId(principal: AdminPrincipal): UUID =
+        principal.orgId ?: throw ForbiddenException("Organization owner has no organization assigned")
 }

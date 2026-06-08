@@ -5,7 +5,7 @@ import com.thomas.notiguide.domain.store.response.StoreSlugListResponse
 import com.thomas.notiguide.domain.store.request.CreateSlugRequest
 import com.thomas.notiguide.domain.store.service.StoreSlugService
 import com.thomas.notiguide.shared.principal.AdminPrincipal
-import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -22,7 +22,8 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/stores/{storeId}/slugs")
 class StoreSlugController(
-    private val storeSlugService: StoreSlugService
+    private val storeSlugService: StoreSlugService,
+    private val storeAccess: StoreAccessService
 ) {
 
     @GetMapping
@@ -30,7 +31,7 @@ class StoreSlugController(
         @PathVariable storeId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<StoreSlugListResponse> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         return ResponseEntity.ok(storeSlugService.listSlugs(storeId))
     }
 
@@ -40,7 +41,7 @@ class StoreSlugController(
         @Valid @RequestBody request: CreateSlugRequest,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<StoreSlugDto> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         return ResponseEntity.status(HttpStatus.CREATED).body(storeSlugService.createAlias(storeId, request))
     }
 
@@ -50,7 +51,7 @@ class StoreSlugController(
         @PathVariable slug: String,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<StoreSlugDto> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         return ResponseEntity.ok(storeSlugService.retireAlias(storeId, slug))
     }
 
@@ -60,7 +61,7 @@ class StoreSlugController(
         @PathVariable slug: String,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<Void> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         storeSlugService.hardDeleteAlias(storeId, slug)
         return ResponseEntity.noContent().build()
     }

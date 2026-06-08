@@ -2,6 +2,7 @@ package com.thomas.notiguide.domain.store.controller
 
 import com.thomas.notiguide.core.exception.ForbiddenException
 import com.thomas.notiguide.domain.admin.types.AdminRole
+import com.thomas.notiguide.domain.organization.response.JoinCodeResponse
 import com.thomas.notiguide.domain.store.dto.StoreDto
 import com.thomas.notiguide.domain.store.response.StorePageResponse
 import com.thomas.notiguide.domain.store.dto.StoreSettingsDto
@@ -10,7 +11,7 @@ import com.thomas.notiguide.domain.store.request.UpdateStoreRequest
 import com.thomas.notiguide.domain.store.request.UpdateStoreSettingsRequest
 import com.thomas.notiguide.domain.store.service.StoreService
 import com.thomas.notiguide.shared.principal.AdminPrincipal
-import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -29,7 +30,8 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/stores")
 class StoreController(
-    private val storeService: StoreService
+    private val storeService: StoreService,
+    private val storeAccess: StoreAccessService
 ) {
 
     @GetMapping
@@ -39,7 +41,9 @@ class StoreController(
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<StorePageResponse> {
         requireSuperAdmin(principal)
-        val response = storeService.listStores(page, size)
+        val orgId = principal.orgId
+            ?: throw ForbiddenException("Organization owner has no organization assigned")
+        val response = storeService.listStores(orgId, page, size)
         return ResponseEntity.ok(response)
     }
 
@@ -48,7 +52,7 @@ class StoreController(
         @PathVariable id: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<StoreDto> {
-        StoreAccessUtil.requireStoreAccess(principal, id)
+        storeAccess.requireStoreAccess(principal, id)
         val dto = storeService.getStore(id)
         return ResponseEntity.ok(dto)
     }
@@ -59,7 +63,9 @@ class StoreController(
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<StoreDto> {
         requireSuperAdmin(principal)
-        val dto = storeService.createStore(request)
+        val orgId = principal.orgId
+            ?: throw ForbiddenException("Organization owner has no organization assigned")
+        val dto = storeService.createStore(request, orgId)
         return ResponseEntity.status(HttpStatus.CREATED).body(dto)
     }
 
@@ -69,7 +75,7 @@ class StoreController(
         @Valid @RequestBody request: UpdateStoreRequest,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<StoreDto> {
-        StoreAccessUtil.requireStoreAccess(principal, id)
+        storeAccess.requireStoreAccess(principal, id)
         if (!isSuperAdmin(principal)) {
             // Regular ADMINs may only toggle queue behavior flags
             if (request.name != null || request.addressProvided || request.isActive != null) {
@@ -86,6 +92,7 @@ class StoreController(
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<Void> {
         requireSuperAdmin(principal)
+        storeAccess.requireStoreAccess(principal, id)
         storeService.deleteStore(id)
         return ResponseEntity.noContent().build()
     }
@@ -95,7 +102,7 @@ class StoreController(
         @PathVariable id: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<StoreSettingsDto> {
-        StoreAccessUtil.requireStoreAccess(principal, id)
+        storeAccess.requireStoreAccess(principal, id)
         return ResponseEntity.ok(storeService.getStoreSettings(id))
     }
 
@@ -105,8 +112,26 @@ class StoreController(
         @Valid @RequestBody request: UpdateStoreSettingsRequest,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<StoreSettingsDto> {
-        StoreAccessUtil.requireStoreAccess(principal, id)
+        storeAccess.requireStoreAccess(principal, id)
         return ResponseEntity.ok(storeService.updateStoreSettings(id, request))
+    }
+
+    @GetMapping("/{id}/join-code")
+    suspend fun getStoreJoinCode(
+        @PathVariable id: UUID,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<JoinCodeResponse> {
+        storeAccess.requireStoreAccess(principal, id)
+        return ResponseEntity.ok(JoinCodeResponse(storeService.getStoreJoinCode(id)))
+    }
+
+    @PostMapping("/{id}/join-code/rotate")
+    suspend fun rotateStoreJoinCode(
+        @PathVariable id: UUID,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<JoinCodeResponse> {
+        storeAccess.requireStoreAccess(principal, id)
+        return ResponseEntity.ok(JoinCodeResponse(storeService.rotateStoreJoinCode(id)))
     }
 
     private fun isSuperAdmin(principal: AdminPrincipal): Boolean =
