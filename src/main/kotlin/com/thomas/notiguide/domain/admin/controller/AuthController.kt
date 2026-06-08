@@ -2,21 +2,28 @@ package com.thomas.notiguide.domain.admin.controller
 
 import com.thomas.notiguide.core.config.AppProperties
 import com.thomas.notiguide.core.config.JWTProperties
+import com.thomas.notiguide.core.exception.PendingJoinRequestException
 import com.thomas.notiguide.core.exception.UnverifiedAdminException
 import com.thomas.notiguide.core.jwt.JWTManager
 import com.thomas.notiguide.core.jwt.LoginAbortService
 import com.thomas.notiguide.core.jwt.RefreshTokenService
 import com.thomas.notiguide.core.jwt.TokenHashUtil
-import com.thomas.notiguide.domain.admin.response.LoginResponse
 import com.thomas.notiguide.domain.admin.repository.AdminRepository
 import com.thomas.notiguide.domain.admin.request.AbortLoginRequest
 import com.thomas.notiguide.domain.admin.request.LoginRequest
+import com.thomas.notiguide.domain.admin.request.RegisterRequest
+import com.thomas.notiguide.domain.admin.response.LoginResponse
+import com.thomas.notiguide.domain.admin.types.RegisterStatus
+import com.thomas.notiguide.domain.admin.response.RegisterResponse
 import com.thomas.notiguide.domain.admin.service.AdminService
+import com.thomas.notiguide.domain.admin.service.JoinRequestService
+import com.thomas.notiguide.domain.admin.service.RegistrationService
 import com.thomas.notiguide.domain.admin.service.SessionService
 import com.thomas.notiguide.domain.store.repository.StoreRepository
 import com.thomas.notiguide.shared.http.ClientIpResolver
 import jakarta.validation.Valid
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseCookie
 import org.springframework.http.ResponseEntity
 import org.springframework.http.server.reactive.ServerHttpRequest
@@ -39,8 +46,17 @@ class AuthController(
     private val appProperties: AppProperties,
     private val adminService: AdminService,
     private val sessionService: SessionService,
-    private val loginAbortService: LoginAbortService
+    private val loginAbortService: LoginAbortService,
+    private val registrationService: RegistrationService,
+    private val joinRequestService: JoinRequestService
 ) {
+
+    @PostMapping("/register")
+    suspend fun register(@Valid @RequestBody request: RegisterRequest): ResponseEntity<RegisterResponse> {
+        val response = registrationService.register(request)
+        val status = if (response.status == RegisterStatus.PENDING) HttpStatus.ACCEPTED else HttpStatus.CREATED
+        return ResponseEntity.status(status).body(response)
+    }
 
     @PostMapping("/login")
     suspend fun login(
@@ -49,7 +65,13 @@ class AuthController(
     ): ResponseEntity<LoginResponse> {
         val ip = extractClientIp(serverRequest)
         val admin = adminRepository.findByUsername(request.username.trim())
-            ?: throw BadCredentialsException("Invalid username or password")
+            ?: run {
+                val pending = joinRequestService.findPendingByUsername(request.username.trim().lowercase())
+                if (pending != null && passwordEncoder.matches(request.password, pending.passwordHash)) {
+                    throw PendingJoinRequestException()
+                }
+                throw BadCredentialsException("Invalid username or password")
+            }
 
         if (!passwordEncoder.matches(request.password, admin.passwordHash)) {
             adminService.recordLoginAttempt(admin.id!!, ip, success = false)

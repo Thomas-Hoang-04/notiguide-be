@@ -30,6 +30,12 @@ object RedisKeyManager {
     fun storeTransmitterActive(storeId: UUID) = "store:$storeId:transmitter:active"
     fun dispatchTracking(dispatchId: UUID): String = "dispatch:tracking:$dispatchId"
 
+    fun joinRequest(requestId: String) = "join_request:$requestId"
+    fun joinRequestOrgIndex(orgId: UUID) = "join_request:index:org:$orgId"
+    fun joinRequestStoreIndex(storeId: UUID) = "join_request:index:store:$storeId"
+    fun joinRequestUsername(usernameLower: String) = "join_request:username:$usernameLower"
+    fun joinRequestLock(requestId: String) = "join_request:lock:$requestId"
+
     fun queueState(storeId: UUID) = "store:$storeId:queue_state"
     fun storeSettings(storeId: UUID) = "store:$storeId:settings"
 

@@ -21,3 +21,6 @@ class ServiceUnavailableException(message: String)
 
 class UnverifiedAdminException
     : HttpException(HttpStatus.FORBIDDEN, "Admin account has not been verified by an elevated admin")
+
+class PendingJoinRequestException
+    : HttpException(HttpStatus.FORBIDDEN, "Your join request is awaiting approval")

@@ -8,4 +8,5 @@ object RedisTTLPolicy {
     val TICKET_TERMINAL: Duration = Duration.ofHours(2)
     val FCM_TOKEN: Duration = Duration.ofHours(12)
     val REFRESH_TOKEN: Duration = Duration.ofDays(7)
+    val JOIN_REQUEST: Duration = Duration.ofDays(7)
 }
