@@ -6,6 +6,7 @@ plugins {
     kotlin("plugin.spring") version kotlinVer
     id("org.springframework.boot") version "3.5.11"
     id("io.spring.dependency-management") version "1.1.7"
+    id("org.jetbrains.kotlinx.kover") version "0.9.8"
 }
 
 group = "com.thomas"
@@ -50,6 +51,11 @@ dependencies {
     testImplementation("org.springframework.security:spring-security-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
+    // MockK + springmockk for Kotlin-native mocking in unit and @WebFluxTest slices.
+    // springmockk 4.x targets Spring Boot 3.x (the 5.x line targets Spring Framework 7 / Boot 4).
+    testImplementation("io.mockk:mockk:1.13.13")
+    testImplementation("com.ninja-squad:springmockk:4.0.2")
+
     implementation("org.bouncycastle:bcpkix-jdk18on:1.84")
     implementation("com.auth0:java-jwt:4.5.1")
     implementation("me.paulschwarz:spring-dotenv:5.1.0")
@@ -69,4 +75,20 @@ tasks.named<BootJar>("bootJar") {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+kover {
+    reports {
+        filters {
+            excludes {
+                classes(
+                    "com.thomas.notiguide.*.entity.*",
+                    "com.thomas.notiguide.*.dto.*",
+                    "com.thomas.notiguide.*.request.*",
+                    "com.thomas.notiguide.*.response.*",
+                )
+                annotatedBy("org.springframework.context.annotation.Configuration")
+            }
+        }
+    }
 }
