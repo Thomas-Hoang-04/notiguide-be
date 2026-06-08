@@ -138,7 +138,7 @@ class HubDiagnosticsService(
         bound.fetch().rowsUpdated().awaitSingle()
     }
 
-    suspend fun getHubHealthSummary(storeId: UUID?): HubHealthSummaryResponse {
+    suspend fun getHubHealthSummary(storeId: UUID?, orgId: UUID?): HubHealthSummaryResponse {
         val hubs = client.sql(
             """
             SELECT id, assigned_name
@@ -146,9 +146,11 @@ class HubDiagnosticsService(
             WHERE kind = 'TRANSMITTER_HUB'
               AND status = 'ACTIVE'
               ${if (storeId != null) "AND store_id = :storeId" else ""}
+              ${if (storeId == null && orgId != null) "AND store_id IN (SELECT id FROM store WHERE org_id = :orgId)" else ""}
             """
         )
             .let { if (storeId != null) it.bind("storeId", storeId) else it }
+            .let { if (storeId == null && orgId != null) it.bind("orgId", orgId) else it }
             .map { row: Readable ->
                 row.get("id", UUID::class.java)!! to row.get("assigned_name", String::class.java)
             }

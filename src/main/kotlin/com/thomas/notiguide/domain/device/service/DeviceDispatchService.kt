@@ -90,7 +90,7 @@ class DeviceDispatchService(
 
     suspend fun getAvailableDevices(storeId: UUID): QueueDispatchAvailabilityResponse {
         val dispatchReady = transmitterElectionServiceProvider.ifAvailable?.electActive(storeId) != null
-        val devices = deviceQueryService.listDevices(kind = null, storeId = storeId).devices
+        val devices = deviceQueryService.listDevices(kind = null, storeId = storeId, orgId = null).devices
             .filter { device ->
                 isDispatchableDevice(device, storeId) && !isBusy(device.id)
             }

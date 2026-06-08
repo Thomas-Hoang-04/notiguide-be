@@ -14,7 +14,7 @@ import com.thomas.notiguide.domain.device.types.DeviceRfAckStatus
 import com.thomas.notiguide.domain.device.types.DeviceStatus
 import com.thomas.notiguide.domain.store.repository.StoreRepository
 import com.thomas.notiguide.shared.principal.AdminPrincipal
-import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.OffsetDateTime
@@ -28,7 +28,8 @@ class PassiveDeviceRegistrationService(
     private val deviceQueryService: DeviceQueryService,
     private val devicePublicIdMinter: DevicePublicIdMinter,
     private val rfCodeValidator: RfCodeValidator,
-    private val rfCodeForbiddenSet: RfCodeForbiddenSet
+    private val rfCodeForbiddenSet: RfCodeForbiddenSet,
+    private val storeAccess: StoreAccessService
 ) {
 
     @Transactional
@@ -36,7 +37,7 @@ class PassiveDeviceRegistrationService(
         request: PassiveDeviceRegistrationRequest,
         principal: AdminPrincipal
     ): DeviceDto {
-        StoreAccessUtil.requireStoreAccess(principal, request.storeId)
+        storeAccess.requireStoreAccess(principal, request.storeId)
         storeRepository.findById(request.storeId)
             ?: throw NotFoundException("Store", "id", request.storeId.toString())
 

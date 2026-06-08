@@ -22,7 +22,7 @@ import com.thomas.notiguide.domain.device.types.DeviceKind
 import com.thomas.notiguide.domain.device.types.DeviceRfAckStatus
 import com.thomas.notiguide.domain.device.types.DeviceStatus
 import com.thomas.notiguide.shared.principal.AdminPrincipal
-import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.stereotype.Service
@@ -42,7 +42,8 @@ class RfCodeService(
     private val rfCodeForbiddenSet: RfCodeForbiddenSet,
     private val properties: DeviceCommandSigningProperties,
     private val signerProvider: ObjectProvider<DeviceCommandSigner>,
-    private val mqttPublisherProvider: ObjectProvider<DeviceMqttPublisher>
+    private val mqttPublisherProvider: ObjectProvider<DeviceMqttPublisher>,
+    private val storeAccess: StoreAccessService
 ) {
 
     private val log = LoggerFactory.getLogger(this::class.java)
@@ -209,12 +210,16 @@ class RfCodeService(
     ): Device {
         val device = deviceRepository.findById(deviceId)
             ?: throw NotFoundException("Device", "id", deviceId.toString())
-        if (isSuperAdmin(principal)) {
-            return device
-        }
         val storeId = device.storeId
-            ?: throw ForbiddenException("Store-scoped admins need an assigned store to access this device")
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        if (storeId == null) {
+            // A storeless/pending device has no org fence yet: only SUPER_ADMIN may touch it.
+            if (isSuperAdmin(principal)) {
+                return device
+            }
+            throw ForbiddenException("Store-scoped admins need an assigned store to access this device")
+        }
+        // Store-assigned device: both roles go through the org-aware fence.
+        storeAccess.requireStoreAccess(principal, storeId)
         return device
     }
 

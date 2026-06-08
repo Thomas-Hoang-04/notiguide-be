@@ -20,7 +20,7 @@ import com.thomas.notiguide.domain.device.request.ApproveDeviceRequest
 import com.thomas.notiguide.domain.device.types.DeviceStatus
 import com.thomas.notiguide.domain.store.repository.StoreRepository
 import com.thomas.notiguide.shared.principal.AdminPrincipal
-import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.reactor.awaitSingleOrNull
 import org.slf4j.LoggerFactory
@@ -43,7 +43,8 @@ class DeviceApprovalService(
     private val objectMapper: ObjectMapper,
     private val redis: ReactiveRedisTemplate<String, String>,
     private val mqttPublisherProvider: ObjectProvider<DeviceMqttPublisher>,
-    private val deviceTransmitterProperties: DeviceTransmitterProperties
+    private val deviceTransmitterProperties: DeviceTransmitterProperties,
+    private val storeAccess: StoreAccessService
 ) {
 
     private val log = LoggerFactory.getLogger(this::class.java)
@@ -56,7 +57,7 @@ class DeviceApprovalService(
         principal: AdminPrincipal
     ): DeviceDetailDto {
         val assignedName = request.assignedName.trim()
-        StoreAccessUtil.requireStoreAccess(principal, request.storeId)
+        storeAccess.requireStoreAccess(principal, request.storeId)
         storeRepository.findById(request.storeId)
             ?: throw NotFoundException("Store", "id", request.storeId.toString())
 
@@ -196,14 +197,18 @@ class DeviceApprovalService(
         }
     }
 
-    private fun requireDeviceAccess(
+    private suspend fun requireDeviceAccess(
         principal: AdminPrincipal,
         device: Device
     ) {
-        if (isSuperAdmin(principal)) return
         val storeId = device.storeId
-            ?: throw ForbiddenException("Store-scoped admins need an assigned store to access this device")
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        if (storeId == null) {
+            // A storeless/pending device has no org fence yet: only SUPER_ADMIN may touch it.
+            if (isSuperAdmin(principal)) return
+            throw ForbiddenException("Store-scoped admins need an assigned store to access this device")
+        }
+        // Store-assigned device: both roles go through the org-aware fence.
+        storeAccess.requireStoreAccess(principal, storeId)
     }
 
     private fun generateChallengeNonce(): String {

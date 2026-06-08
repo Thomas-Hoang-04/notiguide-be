@@ -14,7 +14,7 @@ import com.thomas.notiguide.domain.analytics.response.WaitDistributionResponse
 import com.thomas.notiguide.domain.analytics.service.AnalyticsQueryService
 import com.thomas.notiguide.core.exception.ForbiddenException
 import com.thomas.notiguide.shared.principal.AdminPrincipal
-import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.GetMapping
@@ -28,7 +28,8 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/analytics")
 class AnalyticsController(
-    private val analyticsQueryService: AnalyticsQueryService
+    private val analyticsQueryService: AnalyticsQueryService,
+    private val storeAccess: StoreAccessService
 ) {
 
     // -- Overview (super-admin, cross-store) — must be declared before /{storeId} routes --
@@ -38,7 +39,7 @@ class AnalyticsController(
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<OverviewRealtimeResponse> {
         requireSuperAdmin(principal)
-        return ResponseEntity.ok(analyticsQueryService.getOverviewRealtime())
+        return ResponseEntity.ok(analyticsQueryService.getOverviewRealtime(principal.orgId))
     }
 
     @GetMapping("/overview/throughput")
@@ -49,7 +50,7 @@ class AnalyticsController(
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<DailyThroughputResponse> {
         requireSuperAdmin(principal)
-        return ResponseEntity.ok(analyticsQueryService.getOverviewThroughput(range, from, to))
+        return ResponseEntity.ok(analyticsQueryService.getOverviewThroughput(principal.orgId, range, from, to))
     }
 
     @GetMapping("/overview")
@@ -60,7 +61,7 @@ class AnalyticsController(
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<OverviewResponse> {
         requireSuperAdmin(principal)
-        return ResponseEntity.ok(analyticsQueryService.getOverview(period, from, to))
+        return ResponseEntity.ok(analyticsQueryService.getOverview(principal.orgId, period, from, to))
     }
 
     // -- Store-specific (admin with store access) --
@@ -70,7 +71,7 @@ class AnalyticsController(
         @PathVariable storeId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<RealtimeStatsResponse> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         return ResponseEntity.ok(analyticsQueryService.getRealtimeStats(storeId))
     }
 
@@ -82,7 +83,7 @@ class AnalyticsController(
         @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<StoreSummaryResponse> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         return ResponseEntity.ok(analyticsQueryService.getStoreSummary(storeId, period, from, to))
     }
 
@@ -94,7 +95,7 @@ class AnalyticsController(
         @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<PeakHoursResponse> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         return ResponseEntity.ok(analyticsQueryService.getPeakHours(storeId, range, from, to))
     }
 
@@ -106,7 +107,7 @@ class AnalyticsController(
         @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<DailyThroughputResponse> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         return ResponseEntity.ok(analyticsQueryService.getDailyThroughput(storeId, range, from, to))
     }
 
@@ -118,7 +119,7 @@ class AnalyticsController(
         @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<WaitDistributionResponse> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         return ResponseEntity.ok(analyticsQueryService.getWaitDistribution(storeId, period, from, to))
     }
 
@@ -130,7 +131,7 @@ class AnalyticsController(
         @RequestParam(required = false) to: LocalDate?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<HourlyHeatmapResponse> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         return ResponseEntity.ok(analyticsQueryService.getHourlyHeatmap(storeId, range, from, to))
     }
 

@@ -169,7 +169,7 @@ class AnalyticsEventRepository(private val client: DatabaseClient) {
             .toList()
     }
 
-    suspend fun getOverview(from: OffsetDateTime, to: OffsetDateTime): List<StoreOverviewRow> {
+    suspend fun getOverview(from: OffsetDateTime, to: OffsetDateTime, orgId: UUID?): List<StoreOverviewRow> {
         return client.sql(
             """
             SELECT
@@ -183,12 +183,14 @@ class AnalyticsEventRepository(private val client: DatabaseClient) {
             FROM analytics_event ae
             JOIN store s ON ae.store_id = s.id
             WHERE ae.time >= :from AND ae.time < :to AND ae.store_id IS NOT NULL
+              AND (:orgId IS NULL OR s.org_id = :orgId)
             GROUP BY ae.store_id, s.name
             ORDER BY issued DESC
             """.trimIndent()
         )
             .bind("from", from)
             .bind("to", to)
+            .bindNullable("orgId", orgId, UUID::class.java)
             .map { row: Readable, _ ->
                 StoreOverviewRow(
                     storeId = row.get("store_id", UUID::class.java)!!,
@@ -205,7 +207,7 @@ class AnalyticsEventRepository(private val client: DatabaseClient) {
             .toList()
     }
 
-    suspend fun getOverviewDailyThroughput(from: OffsetDateTime, to: OffsetDateTime): List<DailyCountRow> {
+    suspend fun getOverviewDailyThroughput(from: OffsetDateTime, to: OffsetDateTime, orgId: UUID?): List<DailyCountRow> {
         return client.sql(
             """
             SELECT
@@ -216,12 +218,14 @@ class AnalyticsEventRepository(private val client: DatabaseClient) {
                 COALESCE(SUM(CASE WHEN event_type = 'TICKET_SKIPPED' THEN 1 ELSE 0 END), 0) AS skipped
             FROM analytics_event
             WHERE time >= :from AND time < :to
+              AND (:orgId IS NULL OR store_id IN (SELECT id FROM store WHERE org_id = :orgId))
             GROUP BY day
             ORDER BY day
             """.trimIndent()
         )
             .bind("from", from)
             .bind("to", to)
+            .bindNullable("orgId", orgId, UUID::class.java)
             .map { row: Readable, _ ->
                 DailyCountRow(
                     date = row.get("day", LocalDate::class.java)!!,

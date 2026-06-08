@@ -63,8 +63,8 @@ class AnalyticsQueryService(
         )
     }
 
-    suspend fun getOverviewRealtime(): OverviewRealtimeResponse {
-        val stores = storeRepository.findAllActive().toList()
+    suspend fun getOverviewRealtime(orgId: UUID?): OverviewRealtimeResponse {
+        val stores = if (orgId != null) storeRepository.findActiveByOrgId(orgId).toList() else storeRepository.findAllActive().toList()
         var totalQueue = 0L
         var totalServing = 0L
         var totalIssued = 0L
@@ -151,10 +151,10 @@ class AnalyticsQueryService(
         )
     }
 
-    suspend fun getOverview(period: Period?, customFrom: LocalDate?, customTo: LocalDate?): OverviewResponse {
+    suspend fun getOverview(orgId: UUID?, period: Period?, customFrom: LocalDate?, customTo: LocalDate?): OverviewResponse {
         val (from, to) = resolveTimeRange(period, null, customFrom, customTo)
         val periodLabel = period?.name?.lowercase() ?: "custom"
-        val rows = analyticsEventRepository.getOverview(from, to)
+        val rows = analyticsEventRepository.getOverview(from, to, orgId)
 
         return OverviewResponse(
             period = periodLabel,
@@ -176,10 +176,10 @@ class AnalyticsQueryService(
         )
     }
 
-    suspend fun getOverviewThroughput(range: Range?, customFrom: LocalDate?, customTo: LocalDate?): DailyThroughputResponse {
+    suspend fun getOverviewThroughput(orgId: UUID?, range: Range?, customFrom: LocalDate?, customTo: LocalDate?): DailyThroughputResponse {
         val (from, to) = resolveTimeRange(null, range, customFrom, customTo)
         val rangeLabel = range?.name?.lowercase() ?: "custom"
-        val rows = analyticsEventRepository.getOverviewDailyThroughput(from, to)
+        val rows = analyticsEventRepository.getOverviewDailyThroughput(from, to, orgId)
 
         return DailyThroughputResponse(
             range = rangeLabel,

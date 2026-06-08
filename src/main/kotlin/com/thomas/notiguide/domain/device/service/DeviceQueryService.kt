@@ -23,7 +23,7 @@ import com.thomas.notiguide.domain.device.types.DeviceKind
 import com.thomas.notiguide.domain.device.types.DeviceRfAckStatus
 import com.thomas.notiguide.domain.device.types.DeviceStatus
 import com.thomas.notiguide.shared.principal.AdminPrincipal
-import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import io.r2dbc.spi.Readable
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.reactive.asFlow
@@ -42,12 +42,14 @@ class DeviceQueryService(
     private val objectMapper: ObjectMapper,
     private val hubDiagnosticsService: HubDiagnosticsService,
     private val deviceRepository: DeviceRepository,
-    private val publisherProvider: ObjectProvider<DeviceMqttPublisher>
+    private val publisherProvider: ObjectProvider<DeviceMqttPublisher>,
+    private val storeAccess: StoreAccessService
 ) {
 
     suspend fun listDevices(
         kind: DeviceKind?,
-        storeId: UUID?
+        storeId: UUID?,
+        orgId: UUID?
     ): DeviceListResponse {
         val includeRegisteredCount = kind == DeviceKind.TRANSMITTER_HUB && storeId != null
         val rows = client.sql(
@@ -81,12 +83,14 @@ class DeviceQueryService(
             LEFT JOIN device_rf_code r ON r.device_id = d.id
             WHERE (:kindFilter IS NULL OR d.kind = CAST(:kindFilter AS device_kind))
               AND (:storeId IS NULL OR d.store_id = :storeId)
+              AND (:orgId IS NULL OR s.org_id = :orgId)
             ORDER BY d.created_at DESC
             """
         )
             .bind("includeRegisteredCount", includeRegisteredCount)
             .bindNullable("kindFilter", kind?.name, String::class.java)
             .bindNullable("storeId", storeId, UUID::class.java)
+            .bindNullable("orgId", orgId, UUID::class.java)
             .map(::mapRow)
             .all()
             .asFlow()
@@ -228,10 +232,15 @@ class DeviceQueryService(
     ): DeviceDetailDto {
         val device = deviceRepository.findById(deviceId)
             ?: throw NotFoundException("Device", "id", deviceId.toString())
-        if (!isSuperAdmin(principal)) {
-            val storeId = device.storeId
-                ?: throw ForbiddenException("Store-scoped admins need an assigned store to rename devices")
-            StoreAccessUtil.requireStoreAccess(principal, storeId)
+        val storeId = device.storeId
+        if (storeId == null) {
+            // A storeless/pending device has no org fence yet: only SUPER_ADMIN may touch it.
+            if (!isSuperAdmin(principal)) {
+                throw ForbiddenException("Store-scoped admins need an assigned store to rename devices")
+            }
+        } else {
+            // Store-assigned device: both roles go through the org-aware fence.
+            storeAccess.requireStoreAccess(principal, storeId)
         }
 
         val newName = request.assignedName.trim()

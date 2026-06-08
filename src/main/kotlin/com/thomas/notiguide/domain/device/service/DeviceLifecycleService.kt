@@ -22,7 +22,7 @@ import com.thomas.notiguide.domain.device.types.DeviceLifecycleAckStatus
 import com.thomas.notiguide.domain.device.types.DeviceLifecycleAction
 import com.thomas.notiguide.domain.device.types.DeviceStatus
 import com.thomas.notiguide.shared.principal.AdminPrincipal
-import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.reactor.awaitSingleOrNull
 import org.slf4j.LoggerFactory
@@ -43,7 +43,8 @@ class DeviceLifecycleService(
     private val deviceQueryService: DeviceQueryService,
     private val redis: ReactiveRedisTemplate<String, String>,
     private val signerProvider: ObjectProvider<DeviceCommandSigner>,
-    private val publisherProvider: ObjectProvider<DeviceMqttPublisher>
+    private val publisherProvider: ObjectProvider<DeviceMqttPublisher>,
+    private val storeAccess: StoreAccessService
 ) {
 
     private val log = LoggerFactory.getLogger(this::class.java)
@@ -256,12 +257,16 @@ class DeviceLifecycleService(
     ): Device {
         val device = deviceRepository.findById(deviceId)
             ?: throw NotFoundException("Device", "id", deviceId.toString())
-        if (isSuperAdmin(principal)) {
-            return device
-        }
         val storeId = device.storeId
-            ?: throw ForbiddenException("Store-scoped admins need an assigned store to access this device")
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        if (storeId == null) {
+            // A storeless/pending device has no org fence yet: only SUPER_ADMIN may touch it.
+            if (isSuperAdmin(principal)) {
+                return device
+            }
+            throw ForbiddenException("Store-scoped admins need an assigned store to access this device")
+        }
+        // Store-assigned device: both roles go through the org-aware fence.
+        storeAccess.requireStoreAccess(principal, storeId)
         return device
     }
 

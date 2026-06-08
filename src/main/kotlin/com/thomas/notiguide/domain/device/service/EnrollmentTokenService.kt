@@ -12,6 +12,8 @@ import com.thomas.notiguide.domain.device.dto.EnrollmentTokenMetadataDto
 import com.thomas.notiguide.domain.device.request.IssueEnrollmentTokenRequest
 import com.thomas.notiguide.domain.store.repository.StoreRepository
 import com.thomas.notiguide.shared.principal.AdminPrincipal
+import com.thomas.notiguide.shared.principal.StoreAccessService
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.reactor.awaitSingleOrNull
 import org.springframework.data.redis.core.ReactiveRedisTemplate
@@ -28,6 +30,7 @@ import java.util.UUID
 class EnrollmentTokenService(
     private val redis: ReactiveRedisTemplate<String, String>,
     private val storeRepository: StoreRepository,
+    private val storeAccess: StoreAccessService,
     private val objectMapper: ObjectMapper,
     private val properties: DeviceCommandSigningProperties
 ) {
@@ -71,10 +74,13 @@ class EnrollmentTokenService(
     }
 
     suspend fun list(principal: AdminPrincipal): List<EnrollmentTokenMetadataDto> {
-        val visibleStoreId = if (isSuperAdmin(principal)) {
-            null
+        val allowedStoreIds: Set<UUID> = if (isSuperAdmin(principal)) {
+            val orgId = principal.orgId
+                ?: throw ForbiddenException("Organization owner has no organization assigned")
+            storeRepository.findIdsByOrgId(orgId).toList().toSet()
         } else {
-            principal.storeId ?: throw ForbiddenException("Store-scoped admins need an assigned store to view enrollment tokens")
+            setOf(principal.storeId
+                ?: throw ForbiddenException("Store-scoped admins need an assigned store to view enrollment tokens"))
         }
 
         val keys = redis.scan(
@@ -91,9 +97,8 @@ class EnrollmentTokenService(
                 .getOrNull()
                 ?: continue
 
-            if (visibleStoreId != null && record.storeId != visibleStoreId) {
-                continue
-            }
+            val recordStoreId = record.storeId ?: continue
+            if (recordStoreId !in allowedStoreIds) continue
 
             entries += EnrollmentTokenMetadataDto(
                 tokenHash = key.removePrefix("enroll:"),
@@ -117,13 +122,9 @@ class EnrollmentTokenService(
             .getOrNull()
             ?: return
 
-        if (!isSuperAdmin(principal)) {
-            val principalStoreId = principal.storeId
-                ?: throw ForbiddenException("Store-scoped admins need an assigned store to revoke enrollment tokens")
-            if (record.storeId != principalStoreId) {
-                throw ForbiddenException("You do not have access to this store")
-            }
-        }
+        val storeId = record.storeId
+            ?: throw ForbiddenException("Legacy storeless enrollment tokens cannot be revoked here")
+        storeAccess.requireStoreAccess(principal, storeId)
 
         redis.delete(key).awaitSingleOrNull()
     }
@@ -139,9 +140,12 @@ class EnrollmentTokenService(
     private suspend fun resolveStoreIdForIssue(
         requestedStoreId: UUID?,
         principal: AdminPrincipal
-    ): UUID? {
+    ): UUID {
         val storeId = if (isSuperAdmin(principal)) {
-            requestedStoreId
+            val target = requestedStoreId
+                ?: throw ForbiddenException("Organization owners must specify a store to issue enrollment tokens")
+            storeAccess.requireStoreAccess(principal, target)
+            target
         } else {
             val principalStoreId = principal.storeId
                 ?: throw ForbiddenException("Store-scoped admins need an assigned store to issue enrollment tokens")
@@ -150,11 +154,9 @@ class EnrollmentTokenService(
             }
             principalStoreId
         }
-
-        if (storeId != null && storeRepository.findById(storeId) == null) {
+        if (storeRepository.findById(storeId) == null) {
             throw NotFoundException("Store", "id", storeId.toString())
         }
-
         return storeId
     }
 

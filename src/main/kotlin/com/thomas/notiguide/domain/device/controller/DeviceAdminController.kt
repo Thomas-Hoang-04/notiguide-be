@@ -23,7 +23,7 @@ import com.thomas.notiguide.domain.device.service.HubDiagnosticsService
 import com.thomas.notiguide.domain.device.service.UsbDispatchPayloadService
 import com.thomas.notiguide.domain.device.types.DeviceKind
 import com.thomas.notiguide.shared.principal.AdminPrincipal
-import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -47,7 +47,8 @@ class DeviceAdminController(
     private val rfCodeService: RfCodeService,
     private val deviceLifecycleService: DeviceLifecycleService,
     private val usbDispatchPayloadService: UsbDispatchPayloadService,
-    private val hubDiagnosticsService: HubDiagnosticsService
+    private val hubDiagnosticsService: HubDiagnosticsService,
+    private val storeAccess: StoreAccessService
 ) {
 
     @GetMapping
@@ -58,7 +59,7 @@ class DeviceAdminController(
     ): ResponseEntity<DeviceListResponse> {
         val effectiveStoreId = when {
             storeId != null -> {
-                StoreAccessUtil.requireStoreAccess(principal, storeId)
+                storeAccess.requireStoreAccess(principal, storeId)
                 storeId
             }
             isSuperAdmin(principal) -> null
@@ -66,7 +67,8 @@ class DeviceAdminController(
                 ?: throw ForbiddenException("Store-scoped admins need an assigned store to view devices")
         }
 
-        return ResponseEntity.ok(deviceQueryService.listDevices(kind, effectiveStoreId))
+        val orgScope = if (storeId == null && isSuperAdmin(principal)) principal.orgId else null
+        return ResponseEntity.ok(deviceQueryService.listDevices(kind, effectiveStoreId, orgScope))
     }
 
     @GetMapping("/{id}")
@@ -80,7 +82,7 @@ class DeviceAdminController(
             throw ForbiddenException("Store-scoped admins need an assigned store to view devices")
         }
         if (storeId != null) {
-            StoreAccessUtil.requireStoreAccess(principal, storeId)
+            storeAccess.requireStoreAccess(principal, storeId)
         }
         return ResponseEntity.ok(device)
     }
@@ -159,7 +161,7 @@ class DeviceAdminController(
             throw ForbiddenException("Store-scoped admins need an assigned store to relay diagnostics")
         }
         if (storeId != null) {
-            StoreAccessUtil.requireStoreAccess(principal, storeId)
+            storeAccess.requireStoreAccess(principal, storeId)
         }
         hubDiagnosticsService.relayUsbDiagnostics(device, request)
         return ResponseEntity.noContent().build()
@@ -169,12 +171,11 @@ class DeviceAdminController(
     suspend fun getHubHealth(
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<HubHealthSummaryResponse> {
-        val effectiveStoreId = when {
-            isSuperAdmin(principal) -> null
-            else -> principal.storeId
+        val orgScope = if (isSuperAdmin(principal)) principal.orgId else null
+        val effectiveStoreId = if (isSuperAdmin(principal)) null
+            else principal.storeId
                 ?: throw ForbiddenException("Store-scoped admins need an assigned store to view hub health")
-        }
-        return ResponseEntity.ok(hubDiagnosticsService.getHubHealthSummary(effectiveStoreId))
+        return ResponseEntity.ok(hubDiagnosticsService.getHubHealthSummary(effectiveStoreId, orgScope))
     }
 
     private fun isSuperAdmin(principal: AdminPrincipal): Boolean =

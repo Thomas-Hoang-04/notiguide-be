@@ -9,7 +9,7 @@ import com.thomas.notiguide.domain.device.request.UsbDispatchPayloadRequest
 import com.thomas.notiguide.domain.device.response.UsbDispatchPayloadResponse
 import com.thomas.notiguide.domain.device.types.DeviceStatus
 import com.thomas.notiguide.shared.principal.AdminPrincipal
-import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 
@@ -17,13 +17,14 @@ import org.springframework.stereotype.Service
 class UsbDispatchPayloadService(
     private val deviceRepository: DeviceRepository,
     private val deviceRfCodeRepository: DeviceRfCodeRepository,
-    private val properties: DeviceCommandSigningProperties
+    private val properties: DeviceCommandSigningProperties,
+    private val storeAccess: StoreAccessService
 ) {
     suspend fun preparePayload(
         request: UsbDispatchPayloadRequest,
         principal: AdminPrincipal
     ): UsbDispatchPayloadResponse {
-        StoreAccessUtil.requireStoreAccess(principal, request.storeId)
+        storeAccess.requireStoreAccess(principal, request.storeId)
 
         val device = deviceRepository.findById(request.deviceId)
             ?: throw HttpException(HttpStatus.NOT_FOUND, "device_not_found")

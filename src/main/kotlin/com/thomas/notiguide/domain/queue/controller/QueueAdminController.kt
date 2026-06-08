@@ -13,7 +13,7 @@ import com.thomas.notiguide.domain.queue.service.QueueService
 import com.thomas.notiguide.domain.queue.types.CallNextResult
 import com.thomas.notiguide.domain.queue.types.QueueState
 import com.thomas.notiguide.shared.principal.AdminPrincipal
-import com.thomas.notiguide.shared.principal.StoreAccessUtil
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Size
 import org.springframework.http.MediaType
@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import kotlinx.coroutines.reactor.mono
 import reactor.core.publisher.Flux
 import java.time.Duration
 import java.util.UUID
@@ -39,7 +40,8 @@ import java.util.UUID
 class QueueAdminController(
     private val queueService: QueueService,
     private val queueEventBroadcaster: QueueEventBroadcaster,
-    private val deviceDispatchService: DeviceDispatchService
+    private val deviceDispatchService: DeviceDispatchService,
+    private val storeAccess: StoreAccessService
 ) {
 
     @GetMapping("/size")
@@ -47,7 +49,7 @@ class QueueAdminController(
         @PathVariable storeId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<QueueSizeResponse> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         val queueSize = queueService.getQueueSize(storeId)
         return ResponseEntity.ok(QueueSizeResponse(queueSize = queueSize))
     }
@@ -57,7 +59,7 @@ class QueueAdminController(
         @PathVariable storeId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<List<TicketDto>> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         val tickets = queueService.listWaitingTickets(storeId)
         return ResponseEntity.ok(tickets)
     }
@@ -67,7 +69,7 @@ class QueueAdminController(
         @PathVariable storeId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<QueueDispatchAvailabilityResponse> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         return ResponseEntity.ok(deviceDispatchService.getAvailableDevices(storeId))
     }
 
@@ -77,7 +79,7 @@ class QueueAdminController(
         @Valid @RequestBody request: IssueDeviceTicketRequest,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<TicketDto> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         val ticket = deviceDispatchService.issueDeviceTicket(
             storeId = storeId,
             deviceId = request.deviceId,
@@ -92,7 +94,7 @@ class QueueAdminController(
         @PathVariable ticketId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<TicketStatusResponse> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         val status = queueService.getTicketStatus(storeId, ticketId)
         return ResponseEntity.ok(status)
     }
@@ -104,7 +106,7 @@ class QueueAdminController(
         @RequestParam(required = false) serviceTypeId: UUID?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<NextTicketResponse> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         return when (val result = queueService.callNextUntilSuccess(storeId, counterId, serviceTypeId)) {
             is CallNextResult.Success -> ResponseEntity.ok(NextTicketResponse(ticket = result.ticket))
             is CallNextResult.QueueEmpty -> ResponseEntity.ok(NextTicketResponse(ticket = null))
@@ -119,7 +121,7 @@ class QueueAdminController(
         @RequestParam(required = false) @Size(max = 100) counterId: String?,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<NextTicketResponse> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         return when (val result = queueService.callSpecificTicket(storeId, ticketId, counterId)) {
             is CallNextResult.Success -> ResponseEntity.ok(NextTicketResponse(ticket = result.ticket))
             is CallNextResult.QueueEmpty -> ResponseEntity.ok(NextTicketResponse(ticket = null))
@@ -133,7 +135,7 @@ class QueueAdminController(
         @PathVariable ticketId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<Void> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         queueService.serveTicket(storeId, ticketId)
         return ResponseEntity.noContent().build()
     }
@@ -144,7 +146,7 @@ class QueueAdminController(
         @PathVariable ticketId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<Void> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         queueService.cancelTicket(storeId, ticketId)
         return ResponseEntity.noContent().build()
     }
@@ -154,7 +156,7 @@ class QueueAdminController(
         @PathVariable storeId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<Void> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         queueService.setQueueState(storeId, QueueState.PAUSED)
         return ResponseEntity.noContent().build()
     }
@@ -164,7 +166,7 @@ class QueueAdminController(
         @PathVariable storeId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<Void> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         queueService.setQueueState(storeId, QueueState.ACTIVE)
         return ResponseEntity.noContent().build()
     }
@@ -176,7 +178,7 @@ class QueueAdminController(
         @RequestParam targetServiceTypeId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<Void> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         queueService.transferTicket(storeId, ticketId, targetServiceTypeId)
         return ResponseEntity.noContent().build()
     }
@@ -187,7 +189,7 @@ class QueueAdminController(
         @PathVariable ticketId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<Void> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         queueService.handleNoShow(storeId, ticketId)
         return ResponseEntity.noContent().build()
     }
@@ -197,7 +199,7 @@ class QueueAdminController(
         @PathVariable storeId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): ResponseEntity<Map<String, Int>> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
+        storeAccess.requireStoreAccess(principal, storeId)
         val cleaned = queueService.cleanupServingSet(storeId)
         return ResponseEntity.ok(mapOf("cleanedEntries" to cleaned))
     }
@@ -207,8 +209,6 @@ class QueueAdminController(
         @PathVariable storeId: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
     ): Flux<ServerSentEvent<QueueSseEvent>> {
-        StoreAccessUtil.requireStoreAccess(principal, storeId)
-
         val heartbeat = Flux.interval(Duration.ofSeconds(30))
             .map { ServerSentEvent.builder<QueueSseEvent>().comment("heartbeat").build() }
 
@@ -219,6 +219,7 @@ class QueueAdminController(
                     .build()
             }
 
-        return Flux.merge(events, heartbeat)
+        return mono { storeAccess.requireStoreAccess(principal, storeId) }
+            .thenMany(Flux.merge(events, heartbeat))
     }
 }
