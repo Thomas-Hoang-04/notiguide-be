@@ -8,6 +8,7 @@ import java.util.UUID
 class RedisKeyManagerTest {
     private val storeId = UUID.fromString("11111111-1111-1111-1111-111111111111")
     private val ticketId = UUID.fromString("22222222-2222-2222-2222-222222222222")
+    private val dispatchId = UUID.fromString("33333333-3333-3333-3333-333333333333")
 
     @Test
     fun `queue key has expected format`() {
@@ -40,5 +41,34 @@ class RedisKeyManagerTest {
     fun `counter key contains store id and date`() {
         val key = RedisKeyManager.counter(storeId, LocalDate.of(2026, 6, 8))
         assertThat(key).contains(storeId.toString()).contains("2026-06-08")
+    }
+
+    @Test
+    fun `dispatchPendingAck key has expected format`() {
+        assertThat(RedisKeyManager.dispatchPendingAck(dispatchId))
+            .isEqualTo("dispatch:pending-ack:$dispatchId")
+    }
+
+    @Test
+    fun `isPendingAckKey recognises pending-ack keys only`() {
+        assertThat(RedisKeyManager.isPendingAckKey(RedisKeyManager.dispatchPendingAck(dispatchId))).isTrue()
+        assertThat(RedisKeyManager.isPendingAckKey(RedisKeyManager.dispatchTracking(dispatchId))).isFalse()
+        assertThat(RedisKeyManager.isPendingAckKey(RedisKeyManager.ticket(storeId, ticketId))).isFalse()
+    }
+
+    @Test
+    fun `parsePendingAckKey round-trips a pending-ack key`() {
+        val key = RedisKeyManager.dispatchPendingAck(dispatchId)
+        assertThat(RedisKeyManager.parsePendingAckKey(key)).isEqualTo(dispatchId)
+    }
+
+    @Test
+    fun `parsePendingAckKey returns null for a non-uuid suffix`() {
+        assertThat(RedisKeyManager.parsePendingAckKey("dispatch:pending-ack:not-a-uuid")).isNull()
+    }
+
+    @Test
+    fun `parsePendingAckKey returns null for a completely different key`() {
+        assertThat(RedisKeyManager.parsePendingAckKey(RedisKeyManager.ticket(storeId, ticketId))).isNull()
     }
 }

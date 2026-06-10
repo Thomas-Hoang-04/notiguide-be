@@ -9,7 +9,8 @@ data class DeviceTransmitterProperties(
     val heartbeatLivenessSeconds: Long = 30,
     val activeCacheSeconds: Long = 60,
     val maxRegisteredPerStore: Int = 3,
-    val diagnosticsCacheSeconds: Long = 45
+    val diagnosticsCacheSeconds: Long = 45,
+    val dispatchAckTimeoutSeconds: Long = 30
 ) {
     init {
         require(heartbeatIntervalSeconds > 0) { "Heartbeat intervals must be positive" }
@@ -17,5 +18,6 @@ data class DeviceTransmitterProperties(
         require(activeCacheSeconds > 0) { "Cache TTL must be positive" }
         require(maxRegisteredPerStore > 0) { "Max active transmitter count must be positive" }
         require(diagnosticsCacheSeconds > heartbeatIntervalSeconds) { "Diagnostic cache must exceed heartbeat interval" }
+        require(dispatchAckTimeoutSeconds > 0) { "Dispatch ack timeout must be positive" }
     }
 }

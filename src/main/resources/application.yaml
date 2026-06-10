@@ -38,6 +38,7 @@ device:
     heartbeat-liveness-seconds: 30
     active-cache-seconds: 60
     max-registered-per-store: 3
+    dispatch-ack-timeout-seconds: 30
 
 store:
   slug:

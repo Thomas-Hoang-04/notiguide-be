@@ -7,11 +7,8 @@ import com.thomas.notiguide.core.mqtt.MqttClientManager
 import com.thomas.notiguide.core.mqtt.MqttMessageHandler
 import com.thomas.notiguide.core.mqtt.MqttProperties
 import com.thomas.notiguide.core.redis.RedisKeyManager
-import com.thomas.notiguide.core.mqtt.MqttPublisher.QueueEventType
-import com.thomas.notiguide.core.sse.QueueEventBroadcaster
-import com.thomas.notiguide.core.sse.QueueSseEvent
-import com.thomas.notiguide.domain.device.dto.DispatchTrackingRecord
 import com.thomas.notiguide.domain.device.service.DeviceLifecycleService
+import com.thomas.notiguide.domain.device.service.DispatchReconciliationService
 import com.thomas.notiguide.domain.device.service.HubDiagnosticsService
 import com.thomas.notiguide.domain.device.service.TransmitterElectionService
 import io.r2dbc.spi.Readable
@@ -48,7 +45,7 @@ class TransmitterOperationalListener(
     private val deviceLifecycleService: DeviceLifecycleService,
     private val hubDiagnosticsService: HubDiagnosticsService,
     private val electionService: TransmitterElectionService,
-    private val queueEventBroadcaster: QueueEventBroadcaster
+    private val dispatchReconciliationService: DispatchReconciliationService
 ) : SmartInitializingSingleton {
 
     private val log = LoggerFactory.getLogger(this::class.java)
@@ -149,73 +146,32 @@ class TransmitterOperationalListener(
             ack.ackFor == "deact" -> deviceLifecycleService.onAck(publicId, payload)
             ack.ackFor == "transmit" -> {
                 val seenAt = ack.appliedAt ?: OffsetDateTime.now(ZoneOffset.UTC)
-                touchHub(publicId, seenAt)
-                if (ack.dispatchId == null) {
+                // A failed liveness touch must not abort ack reconciliation — a skipped
+                // completeDispatch would later surface a spurious ack_timeout failure.
+                runCatching { touchHub(publicId, seenAt) }
+                    .onFailure { log.warn("dispatch_ack_touch_failed publicId={}", publicId, it) }
+                val dispatchId = ack.dispatchId
+                if (dispatchId == null) {
                     log.warn("Dropping transmitter ack without dispatch_id for {}", publicId)
                     return
                 }
                 log.info(
                     "Transmitter dispatch ack: publicId={} dispatchId={} status={} reason={}",
                     publicId,
-                    ack.dispatchId,
+                    dispatchId,
                     ack.status,
                     ack.reason
                 )
-                if (ack.status != "applied" && ack.status != "unchanged") {
-                    handleTransmitRejection(ack.dispatchId, publicId, ack.status, ack.reason)
+                if (ack.status == "applied" || ack.status == "unchanged") {
+                    dispatchReconciliationService.completeDispatch(dispatchId)
+                } else {
+                    dispatchReconciliationService.failDispatch(
+                        dispatchId,
+                        "transmit_rejected:${ack.reason ?: ack.status}"
+                    )
                 }
             }
         }
-    }
-
-    private suspend fun handleTransmitRejection(
-        dispatchId: UUID?,
-        publicId: String,
-        status: String,
-        reason: String?
-    ) {
-        if (dispatchId == null) return
-
-        val trackingKey = RedisKeyManager.dispatchTracking(dispatchId)
-        val trackingJson = redis.opsForValue()
-            .get(trackingKey)
-            .awaitSingleOrNull() ?: run {
-            log.warn("dispatch_rejection_no_tracking dispatch={}", dispatchId)
-            return
-        }
-
-        val tracking = runCatching {
-            objectMapper.readValue(trackingJson, DispatchTrackingRecord::class.java)
-        }.getOrElse {
-            log.warn("dispatch_rejection_malformed_tracking dispatch={}", dispatchId, it)
-            return
-        }
-
-        runCatching {
-            redis.delete(RedisKeyManager.deviceBusy(tracking.deviceId)).awaitSingleOrNull()
-        }.onFailure { ex ->
-            log.warn(
-                "dispatch_rejection_busy_release_failed device={}",
-                tracking.deviceId, ex
-            )
-        }
-
-        queueEventBroadcaster.broadcast(
-            QueueSseEvent(
-                type = QueueEventType.DEVICE_DISPATCH_FAILED.name,
-                storeId = tracking.storeId,
-                ticketId = tracking.ticketId,
-                ticketNumber = tracking.ticketNumber,
-                reason = "transmit_rejected:${reason ?: status}"
-            )
-        )
-
-        runCatching { redis.delete(trackingKey).awaitSingleOrNull() }
-
-        log.warn(
-            "dispatch_rejected_by_hub publicId={} dispatch={} status={} reason={} device={}",
-            publicId, dispatchId, status, reason, tracking.deviceId
-        )
     }
 
     private suspend fun touchHub(

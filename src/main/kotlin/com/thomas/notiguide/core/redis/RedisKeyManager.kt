@@ -29,6 +29,7 @@ object RedisKeyManager {
     fun deviceHubDiagnostics(deviceId: UUID) = "device:hub:diag:$deviceId"
     fun storeTransmitterActive(storeId: UUID) = "store:$storeId:transmitter:active"
     fun dispatchTracking(dispatchId: UUID): String = "dispatch:tracking:$dispatchId"
+    fun dispatchPendingAck(dispatchId: UUID): String = "dispatch:pending-ack:$dispatchId"
 
     fun joinRequest(requestId: String) = "join_request:$requestId"
     fun joinRequestOrgIndex(orgId: UUID) = "join_request:index:org:$orgId"
@@ -52,6 +53,14 @@ object RedisKeyManager {
 
     fun isTicketKey(key: String) = key.startsWith("ticket:")
     fun isGraceExpiryKey(key: String) = key.startsWith("grace:")
+    fun isPendingAckKey(key: String) = key.startsWith("dispatch:pending-ack:")
+
+    fun parsePendingAckKey(key: String): UUID? =
+        try {
+            UUID.fromString(key.removePrefix("dispatch:pending-ack:"))
+        } catch (_: IllegalArgumentException) {
+            null
+        }
 
     fun parseGraceExpiryKey(key: String): Pair<UUID, UUID>? {
         val parts = key.removePrefix("grace:").split(":", limit = 2)

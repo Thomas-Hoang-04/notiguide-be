@@ -6,6 +6,7 @@ import com.thomas.notiguide.core.device.DeviceCanonical
 import com.thomas.notiguide.core.device.DeviceCommandSigner
 import com.thomas.notiguide.core.device.DeviceCommandSigningProperties
 import com.thomas.notiguide.core.device.DeviceMqttPublisher
+import com.thomas.notiguide.core.device.DeviceTransmitterProperties
 import com.thomas.notiguide.core.mqtt.MqttPublisher
 import com.thomas.notiguide.core.mqtt.MqttPublisher.QueueEvent
 import com.thomas.notiguide.core.mqtt.MqttPublisher.QueueEventType
@@ -14,6 +15,7 @@ import com.thomas.notiguide.core.sse.QueueEventBroadcaster
 import com.thomas.notiguide.core.sse.QueueSseEvent
 import com.thomas.notiguide.domain.device.dto.DispatchTrackingRecord
 import com.thomas.notiguide.domain.device.dto.DeviceDispatchEvent
+import com.thomas.notiguide.domain.device.dto.TransmitEnvelope
 import com.thomas.notiguide.domain.device.entity.Device
 import com.thomas.notiguide.domain.device.repository.DeviceRepository
 import com.thomas.notiguide.domain.device.repository.DeviceRfCodeRepository
@@ -51,6 +53,7 @@ class TransmitterDispatchService(
     private val signerProvider: ObjectProvider<DeviceCommandSigner>,
     private val publisherProvider: ObjectProvider<DeviceMqttPublisher>,
     private val objectMapper: ObjectMapper,
+    private val transmitterProperties: DeviceTransmitterProperties,
     private val mqttPublisher: MqttPublisher? = null
 ) : SmartInitializingSingleton {
 
@@ -187,25 +190,7 @@ class TransmitterDispatchService(
             return
         }
 
-        runCatching {
-            val trackingPayload = objectMapper.writeValueAsString(
-                DispatchTrackingRecord(
-                    deviceId = event.deviceId,
-                    storeId = event.storeId,
-                    ticketId = event.ticketId,
-                    ticketNumber = event.ticketNumber
-                )
-            )
-            redis.opsForValue()
-                .set(
-                    RedisKeyManager.dispatchTracking(dispatchId),
-                    trackingPayload,
-                    Duration.ofMinutes(5)
-                )
-                .awaitSingleOrNull()
-        }.onFailure { ex ->
-            log.warn("dispatch_tracking_write_failed dispatch={}", dispatchId, ex)
-        }
+        trackDispatch(dispatchId, event)
 
         if (event.type == DeviceDispatchEventType.DEVICE_STOP_REQUESTED &&
             event.disposition == DeviceDispatchStopDisposition.RELEASE
@@ -303,6 +288,23 @@ class TransmitterDispatchService(
             return
         }
 
+        trackDispatch(dispatchId, event)
+
+        if (event.type == DeviceDispatchEventType.DEVICE_STOP_REQUESTED &&
+            event.disposition == DeviceDispatchStopDisposition.RELEASE
+        ) {
+            runCatching {
+                redis.delete(RedisKeyManager.deviceBusy(event.deviceId)).awaitSingleOrNull()
+            }.onFailure { ex ->
+                log.warn(
+                    "transmitter_slot_dispatch_busy_release_failed store={} ticket={} device={}",
+                    event.storeId, event.ticketId, event.deviceId, ex
+                )
+            }
+        }
+    }
+
+    private suspend fun trackDispatch(dispatchId: UUID, event: DeviceDispatchEvent) {
         runCatching {
             val trackingPayload = objectMapper.writeValueAsString(
                 DispatchTrackingRecord(
@@ -321,18 +323,22 @@ class TransmitterDispatchService(
                 .awaitSingleOrNull()
         }.onFailure { ex ->
             log.warn("dispatch_tracking_write_failed dispatch={}", dispatchId, ex)
+            return
         }
-
-        if (event.type == DeviceDispatchEventType.DEVICE_STOP_REQUESTED &&
-            event.disposition == DeviceDispatchStopDisposition.RELEASE
-        ) {
+        // Arm the ack-timeout timer only for CALL dispatches (the call-side deadlock of Case B), and
+        // only AFTER the record exists so a timeout always finds it. STOP dispatches keep the tracking
+        // record for the rejection path but arm no timer.
+        if (event.type == DeviceDispatchEventType.DEVICE_CALL_REQUESTED) {
             runCatching {
-                redis.delete(RedisKeyManager.deviceBusy(event.deviceId)).awaitSingleOrNull()
+                redis.opsForValue()
+                    .set(
+                        RedisKeyManager.dispatchPendingAck(dispatchId),
+                        "1",
+                        Duration.ofSeconds(transmitterProperties.dispatchAckTimeoutSeconds)
+                    )
+                    .awaitSingleOrNull()
             }.onFailure { ex ->
-                log.warn(
-                    "transmitter_slot_dispatch_busy_release_failed store={} ticket={} device={}",
-                    event.storeId, event.ticketId, event.deviceId, ex
-                )
+                log.warn("dispatch_ack_timer_arm_failed dispatch={}", dispatchId, ex)
             }
         }
     }
@@ -367,6 +373,7 @@ class TransmitterDispatchService(
             rfCodeBits = patched.bits,
             protoAny = patched.protoAny,
             issuedAt = issuedAt.toInstant().toString(),
+            deviceName = receiver.assignedName,
             signatureB64 = signer.sign(canonical)
         )
     }
@@ -430,26 +437,6 @@ private data class DispatchPayload(
         return result
     }
 }
-
-private data class TransmitEnvelope(
-    @field:JsonProperty("schema_version")
-    val schemaVersion: Int = 1,
-    @field:JsonProperty("dispatch_id")
-    val dispatchId: UUID,
-    @field:JsonProperty("receiver_public_id")
-    val receiverPublicId: String,
-    val band: String,
-    @field:JsonProperty("rf_code_hex")
-    val rfCodeHex: String,
-    @field:JsonProperty("rf_code_bits")
-    val rfCodeBits: Int,
-    @field:JsonProperty("proto_any")
-    val protoAny: Boolean,
-    @field:JsonProperty("issued_at")
-    val issuedAt: String,
-    @field:JsonProperty("signature_b64")
-    val signatureB64: String
-)
 
 private data class SlotDispatchEnvelope(
     @field:JsonProperty("schema_version")

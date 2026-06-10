@@ -1,5 +1,6 @@
 package com.thomas.notiguide.core.redis
 
+import com.thomas.notiguide.domain.device.service.DispatchReconciliationService
 import com.thomas.notiguide.domain.queue.repository.RedisQueueRepository
 import com.thomas.notiguide.domain.queue.service.QueueService
 import kotlinx.coroutines.CoroutineScope
@@ -11,6 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.reactive.asFlow
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.DisposableBean
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory
@@ -24,7 +26,8 @@ import kotlin.time.Duration.Companion.milliseconds
 class RedisKeyExpirationListener(
     private val connectionFactory: ReactiveRedisConnectionFactory,
     private val queueRepo: RedisQueueRepository,
-    private val queueService: QueueService
+    private val queueService: QueueService,
+    private val dispatchReconcilerProvider: ObjectProvider<DispatchReconciliationService>
 ) : DisposableBean {
 
     private val log = LoggerFactory.getLogger(this::class.java)
@@ -90,6 +93,26 @@ class RedisKeyExpirationListener(
                             queueService.handleNoShow(storeId, ticketId)
                         } catch (e: Exception) {
                             log.error("Failed to handle no-show: store={} ticket={}", storeId, ticketId, e)
+                        }
+                        return@collect
+                    }
+
+                    if (RedisKeyManager.isPendingAckKey(expiredKey)) {
+                        val dispatchId = RedisKeyManager.parsePendingAckKey(expiredKey)
+                        if (dispatchId == null) {
+                            log.warn("Unparseable pending-ack key, skipping: key={}", expiredKey)
+                            return@collect
+                        }
+                        val reconciler = dispatchReconcilerProvider.ifAvailable
+                        if (reconciler == null) {
+                            log.warn("Dispatch ack expired but transmitter feature is disabled, skipping: dispatch={}", dispatchId)
+                            return@collect
+                        }
+                        log.info("Dispatch ack timed out: dispatch={}", dispatchId)
+                        try {
+                            reconciler.failDispatch(dispatchId, "ack_timeout")
+                        } catch (e: Exception) {
+                            log.error("Failed to reconcile timed-out dispatch: dispatch={}", dispatchId, e)
                         }
                         return@collect
                     }
