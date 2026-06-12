@@ -1,8 +1,11 @@
 package com.thomas.notiguide.domain.store.controller
 
+import com.thomas.notiguide.core.exception.ConflictException
 import com.thomas.notiguide.core.exception.ForbiddenException
+import com.thomas.notiguide.domain.admin.service.InviteLinkService
+import com.thomas.notiguide.domain.admin.service.JoinRequestService
 import com.thomas.notiguide.domain.admin.types.AdminRole
-import com.thomas.notiguide.domain.organization.response.JoinCodeResponse
+import com.thomas.notiguide.domain.organization.response.InviteLinkResponse
 import com.thomas.notiguide.domain.store.dto.StoreDto
 import com.thomas.notiguide.domain.store.response.StorePageResponse
 import com.thomas.notiguide.domain.store.dto.StoreSettingsDto
@@ -31,7 +34,8 @@ import java.util.UUID
 @RequestMapping("/api/stores")
 class StoreController(
     private val storeService: StoreService,
-    private val storeAccess: StoreAccessService
+    private val storeAccess: StoreAccessService,
+    private val inviteLinkService: InviteLinkService
 ) {
 
     @GetMapping
@@ -116,22 +120,39 @@ class StoreController(
         return ResponseEntity.ok(storeService.updateStoreSettings(id, request))
     }
 
-    @GetMapping("/{id}/join-code")
-    suspend fun getStoreJoinCode(
+    @GetMapping("/{id}/invite-link")
+    suspend fun getStoreInviteLink(
         @PathVariable id: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
-    ): ResponseEntity<JoinCodeResponse> {
+    ): ResponseEntity<InviteLinkResponse> {
         storeAccess.requireStoreAccess(principal, id)
-        return ResponseEntity.ok(JoinCodeResponse(storeService.getStoreJoinCode(id)))
+        requireIndependentStore(id)
+        return ResponseEntity.ok(
+            composeLinkResponse(id, inviteLinkService.getActive(JoinRequestService.TargetType.STORE, id))
+        )
     }
 
-    @PostMapping("/{id}/join-code/rotate")
-    suspend fun rotateStoreJoinCode(
+    @PostMapping("/{id}/invite-link/rotate")
+    suspend fun rotateStoreInviteLink(
         @PathVariable id: UUID,
         @AuthenticationPrincipal principal: AdminPrincipal
-    ): ResponseEntity<JoinCodeResponse> {
+    ): ResponseEntity<InviteLinkResponse> {
         storeAccess.requireStoreAccess(principal, id)
-        return ResponseEntity.ok(JoinCodeResponse(storeService.rotateStoreJoinCode(id)))
+        requireIndependentStore(id)
+        return ResponseEntity.ok(
+            composeLinkResponse(id, inviteLinkService.regenerate(JoinRequestService.TargetType.STORE, id))
+        )
+    }
+
+    /** Org-owned stores are joined via the organization — invites for them are managed at the org level. */
+    private suspend fun requireIndependentStore(id: UUID) {
+        if (storeService.getStore(id).orgId != null)
+            throw ConflictException("Org-owned stores are joined via the organization")
+    }
+
+    private suspend fun composeLinkResponse(storeId: UUID, link: InviteLinkResponse?): InviteLinkResponse {
+        val base = link ?: InviteLinkResponse(token = null, expiresAt = null)
+        return base.copy(recentUses = inviteLinkService.getRecentUses(JoinRequestService.TargetType.STORE, storeId))
     }
 
     private fun isSuperAdmin(principal: AdminPrincipal): Boolean =

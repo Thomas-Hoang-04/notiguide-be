@@ -21,9 +21,6 @@ data class Store(
     @Column("org_id")
     val orgId: UUID? = null,
 
-    @Column("join_code")
-    val joinCode: String? = null,
-
     @Column("name")
     val name: String,
 

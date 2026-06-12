@@ -1,6 +1,7 @@
 package com.thomas.notiguide.domain.device.service
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.thomas.notiguide.core.device.DeviceTransmitterProperties
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -14,7 +15,7 @@ import java.util.UUID
 
 class HubDiagnosticsServiceTest {
     private val redis = mockk<ReactiveRedisTemplate<String, String>>()
-    private val properties = mockk<com.thomas.notiguide.core.device.DeviceTransmitterProperties>(relaxed = true)
+    private val properties = mockk<DeviceTransmitterProperties>(relaxed = true)
     private val client = mockk<DatabaseClient>(relaxed = true)
     private val service = HubDiagnosticsService(redis, jacksonObjectMapper(), properties, client)
 

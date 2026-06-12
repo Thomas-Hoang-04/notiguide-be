@@ -71,4 +71,12 @@ class RedisKeyManagerTest {
     fun `parsePendingAckKey returns null for a completely different key`() {
         assertThat(RedisKeyManager.parsePendingAckKey(RedisKeyManager.ticket(storeId, ticketId))).isNull()
     }
+
+    @Test
+    fun `invite keys have expected formats`() {
+        assertThat(RedisKeyManager.inviteToken("i_abc")).isEqualTo("invite:token:i_abc")
+        assertThat(RedisKeyManager.inviteActive("ORG", storeId)).isEqualTo("invite:active:ORG:$storeId")
+        assertThat(RedisKeyManager.inviteLock("STORE", storeId)).isEqualTo("invite:lock:STORE:$storeId")
+        assertThat(RedisKeyManager.inviteAudit("STORE", storeId)).isEqualTo("invite:audit:STORE:$storeId")
+    }
 }

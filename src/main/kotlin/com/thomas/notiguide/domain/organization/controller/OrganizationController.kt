@@ -2,9 +2,11 @@ package com.thomas.notiguide.domain.organization.controller
 
 import com.thomas.notiguide.core.exception.ForbiddenException
 import com.thomas.notiguide.core.exception.NotFoundException
+import com.thomas.notiguide.domain.admin.service.InviteLinkService
+import com.thomas.notiguide.domain.admin.service.JoinRequestService
 import com.thomas.notiguide.domain.admin.types.AdminRole
 import com.thomas.notiguide.domain.organization.dto.OrganizationPublicDto
-import com.thomas.notiguide.domain.organization.response.JoinCodeResponse
+import com.thomas.notiguide.domain.organization.response.InviteLinkResponse
 import com.thomas.notiguide.domain.organization.service.OrganizationService
 import com.thomas.notiguide.domain.store.repository.StoreRepository
 import com.thomas.notiguide.shared.principal.AdminPrincipal
@@ -20,25 +22,14 @@ import java.util.UUID
 @RequestMapping("/api/orgs")
 class OrganizationController(
     private val organizationService: OrganizationService,
-    private val storeRepository: StoreRepository
+    private val storeRepository: StoreRepository,
+    private val inviteLinkService: InviteLinkService
 ) {
     @GetMapping("/me")
     suspend fun getMyOrg(@AuthenticationPrincipal principal: AdminPrincipal): ResponseEntity<OrganizationPublicDto> {
         val orgId = resolveOrgId(principal)
             ?: throw NotFoundException("Organization", "admin", principal.id.toString())
         return ResponseEntity.ok(organizationService.getOrganizationPublic(orgId))
-    }
-
-    @GetMapping("/me/join-code")
-    suspend fun getJoinCode(@AuthenticationPrincipal principal: AdminPrincipal): ResponseEntity<JoinCodeResponse> {
-        val orgId = requireOrgOwner(principal)
-        return ResponseEntity.ok(JoinCodeResponse(organizationService.getOrganization(orgId).joinCode))
-    }
-
-    @PostMapping("/me/join-code/rotate")
-    suspend fun rotateJoinCode(@AuthenticationPrincipal principal: AdminPrincipal): ResponseEntity<JoinCodeResponse> {
-        val orgId = requireOrgOwner(principal)
-        return ResponseEntity.ok(JoinCodeResponse(organizationService.rotateJoinCode(orgId).joinCode))
     }
 
     private suspend fun resolveOrgId(principal: AdminPrincipal): UUID? {
@@ -49,8 +40,25 @@ class OrganizationController(
         return storeRepository.findOrgIdByStoreId(storeId)
     }
 
+    @GetMapping("/me/invite-link")
+    suspend fun getInviteLink(@AuthenticationPrincipal principal: AdminPrincipal): ResponseEntity<InviteLinkResponse> {
+        val orgId = requireOrgOwner(principal)
+        return ResponseEntity.ok(composeLinkResponse(orgId, inviteLinkService.getActive(JoinRequestService.TargetType.ORG, orgId)))
+    }
+
+    @PostMapping("/me/invite-link/rotate")
+    suspend fun rotateInviteLink(@AuthenticationPrincipal principal: AdminPrincipal): ResponseEntity<InviteLinkResponse> {
+        val orgId = requireOrgOwner(principal)
+        return ResponseEntity.ok(composeLinkResponse(orgId, inviteLinkService.regenerate(JoinRequestService.TargetType.ORG, orgId)))
+    }
+
+    private suspend fun composeLinkResponse(orgId: UUID, link: InviteLinkResponse?): InviteLinkResponse {
+        val base = link ?: InviteLinkResponse(token = null, expiresAt = null)
+        return base.copy(recentUses = inviteLinkService.getRecentUses(JoinRequestService.TargetType.ORG, orgId))
+    }
+
     private fun requireOrgOwner(principal: AdminPrincipal) =
         principal.takeIf { it.authorities.any { a -> a.authority == AdminRole.ROLE_SUPER_ADMIN.name } }
             ?.orgId
-            ?: throw ForbiddenException("Only organization owners can manage organization join codes")
+            ?: throw ForbiddenException("Only organization owners can manage organization invites")
 }

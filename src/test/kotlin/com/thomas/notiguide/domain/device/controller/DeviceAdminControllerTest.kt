@@ -4,6 +4,14 @@ import com.ninjasquad.springmockk.MockkBean
 import com.thomas.notiguide.core.jwt.JWTAuthFilter
 import com.thomas.notiguide.core.ratelimit.RateLimitFilter
 import com.thomas.notiguide.domain.device.response.DeviceListResponse
+import com.thomas.notiguide.domain.device.service.DeviceApprovalService
+import com.thomas.notiguide.domain.device.service.DeviceLifecycleService
+import com.thomas.notiguide.domain.device.service.DeviceQueryService
+import com.thomas.notiguide.domain.device.service.HubDiagnosticsService
+import com.thomas.notiguide.domain.device.service.PassiveDeviceRegistrationService
+import com.thomas.notiguide.domain.device.service.RfCodeService
+import com.thomas.notiguide.domain.device.service.UsbDispatchPayloadService
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import com.thomas.notiguide.support.TestPrincipals
 import com.thomas.notiguide.support.TestSecurityConfig
 import io.mockk.coEvery
@@ -24,14 +32,14 @@ import java.util.UUID
 )
 @Import(TestSecurityConfig::class)
 class DeviceAdminControllerTest {
-    @MockkBean lateinit var deviceQueryService: com.thomas.notiguide.domain.device.service.DeviceQueryService
-    @MockkBean(relaxed = true) lateinit var passiveDeviceRegistrationService: com.thomas.notiguide.domain.device.service.PassiveDeviceRegistrationService
-    @MockkBean(relaxed = true) lateinit var deviceApprovalService: com.thomas.notiguide.domain.device.service.DeviceApprovalService
-    @MockkBean(relaxed = true) lateinit var rfCodeService: com.thomas.notiguide.domain.device.service.RfCodeService
-    @MockkBean(relaxed = true) lateinit var deviceLifecycleService: com.thomas.notiguide.domain.device.service.DeviceLifecycleService
-    @MockkBean(relaxed = true) lateinit var usbDispatchPayloadService: com.thomas.notiguide.domain.device.service.UsbDispatchPayloadService
-    @MockkBean(relaxed = true) lateinit var hubDiagnosticsService: com.thomas.notiguide.domain.device.service.HubDiagnosticsService
-    @MockkBean lateinit var storeAccess: com.thomas.notiguide.shared.principal.StoreAccessService
+    @MockkBean lateinit var deviceQueryService: DeviceQueryService
+    @MockkBean(relaxed = true) lateinit var passiveDeviceRegistrationService: PassiveDeviceRegistrationService
+    @MockkBean(relaxed = true) lateinit var deviceApprovalService: DeviceApprovalService
+    @MockkBean(relaxed = true) lateinit var rfCodeService: RfCodeService
+    @MockkBean(relaxed = true) lateinit var deviceLifecycleService: DeviceLifecycleService
+    @MockkBean(relaxed = true) lateinit var usbDispatchPayloadService: UsbDispatchPayloadService
+    @MockkBean(relaxed = true) lateinit var hubDiagnosticsService: HubDiagnosticsService
+    @MockkBean lateinit var storeAccess: StoreAccessService
 
     @Autowired lateinit var client: WebTestClient
 

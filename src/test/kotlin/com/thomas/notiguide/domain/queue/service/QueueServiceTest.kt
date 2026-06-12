@@ -2,10 +2,16 @@ package com.thomas.notiguide.domain.queue.service
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.thomas.notiguide.core.redis.RedisKeyManager
+import com.thomas.notiguide.core.sse.QueueEventBroadcaster
+import com.thomas.notiguide.domain.device.service.DeviceDispatchEventBroadcaster
+import com.thomas.notiguide.domain.device.service.DeviceQueryService
 import com.thomas.notiguide.domain.queue.repository.RedisCounterRepository
 import com.thomas.notiguide.domain.queue.repository.RedisQueueRepository
 import com.thomas.notiguide.domain.queue.repository.RedisTicketRepository
 import com.thomas.notiguide.domain.queue.types.QueueState
+import com.thomas.notiguide.domain.store.repository.ServiceTypeRepository
+import com.thomas.notiguide.domain.store.repository.StoreRepository
+import com.thomas.notiguide.domain.store.repository.StoreSettingsRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -20,17 +26,16 @@ import reactor.core.publisher.Mono
 import java.util.UUID
 
 class QueueServiceTest {
-    private val storeRepository = mockk<com.thomas.notiguide.domain.store.repository.StoreRepository>(relaxed = true)
+    private val storeRepository = mockk<StoreRepository>(relaxed = true)
     private val redisQueueRepository = mockk<RedisQueueRepository>()
     private val redisTicketRepository = mockk<RedisTicketRepository>()
     private val redisCounterRepository = mockk<RedisCounterRepository>(relaxed = true)
     private val redis = mockk<ReactiveRedisTemplate<String, String>>()
-    private val queueEventBroadcaster = mockk<com.thomas.notiguide.core.sse.QueueEventBroadcaster>(relaxed = true)
-    private val deviceDispatchEventBroadcaster =
-        mockk<com.thomas.notiguide.domain.device.service.DeviceDispatchEventBroadcaster>(relaxed = true)
-    private val deviceQueryService = mockk<com.thomas.notiguide.domain.device.service.DeviceQueryService>(relaxed = true)
-    private val storeSettingsRepository = mockk<com.thomas.notiguide.domain.store.repository.StoreSettingsRepository>(relaxed = true)
-    private val serviceTypeRepository = mockk<com.thomas.notiguide.domain.store.repository.ServiceTypeRepository>(relaxed = true)
+    private val queueEventBroadcaster = mockk<QueueEventBroadcaster>(relaxed = true)
+    private val deviceDispatchEventBroadcaster = mockk<DeviceDispatchEventBroadcaster>(relaxed = true)
+    private val deviceQueryService = mockk<DeviceQueryService>(relaxed = true)
+    private val storeSettingsRepository = mockk<StoreSettingsRepository>(relaxed = true)
+    private val serviceTypeRepository = mockk<ServiceTypeRepository>(relaxed = true)
 
     private val service = QueueService(
         storeRepository, redisQueueRepository, redisTicketRepository, redisCounterRepository,

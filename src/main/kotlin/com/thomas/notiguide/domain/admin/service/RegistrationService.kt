@@ -2,7 +2,6 @@ package com.thomas.notiguide.domain.admin.service
 
 import com.thomas.notiguide.core.exception.ConflictException
 import com.thomas.notiguide.core.exception.HttpException
-import com.thomas.notiguide.core.tenant.JoinCodeGenerator
 import com.thomas.notiguide.domain.admin.entity.Admin
 import com.thomas.notiguide.domain.admin.repository.AdminRepository
 import com.thomas.notiguide.domain.admin.types.RegisterMode
@@ -15,10 +14,12 @@ import com.thomas.notiguide.domain.organization.repository.OrganizationRepositor
 import com.thomas.notiguide.domain.store.repository.StoreRepository
 import com.thomas.notiguide.domain.store.request.CreateStoreRequest
 import com.thomas.notiguide.domain.store.service.StoreService
+import kotlinx.coroutines.CancellationException
 import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.util.UUID
 
 @Service
 class RegistrationService(
@@ -27,7 +28,8 @@ class RegistrationService(
     private val storeRepository: StoreRepository,
     private val storeService: StoreService,
     private val passwordEncoder: PasswordEncoder,
-    private val joinRequestService: JoinRequestService
+    private val joinRequestService: JoinRequestService,
+    private val inviteLinkService: InviteLinkService
 ) {
     @Transactional
     suspend fun register(request: RegisterRequest): RegisterResponse {
@@ -54,7 +56,7 @@ class RegistrationService(
             ?: throw HttpException(HttpStatus.BAD_REQUEST, "Organization name is required")
 
         val org = organizationRepository.save(
-            Organization(name = orgName, joinCode = generateUniqueOrgCode())
+            Organization(name = orgName)
         )
         val admin = adminRepository.save(
             Admin(
@@ -92,33 +94,52 @@ class RegistrationService(
     }
 
     private suspend fun join(username: String, passwordHash: String, request: RegisterRequest): RegisterResponse {
-        val code = request.joinCode?.trim()?.takeIf { it.isNotBlank() }
-            ?: throw HttpException(HttpStatus.BAD_REQUEST, "Join code is required")
+        val inviteToken = request.inviteToken?.trim()?.takeIf { it.isNotBlank() }
+            ?: throw HttpException(HttpStatus.BAD_REQUEST, "An invite link is required")
+        return joinViaInviteToken(username, passwordHash, inviteToken)
+    }
 
-        when {
-            code.startsWith(JoinCodeGenerator.ORG_PREFIX) -> {
-                val org = organizationRepository.findByJoinCode(code)
-                    ?: throw HttpException(HttpStatus.BAD_REQUEST, "Invalid join code")
-                joinRequestService.create(username, passwordHash, JoinRequestService.TargetType.ORG, org.id!!)
-                return RegisterResponse(RegisterStatus.PENDING, AdminRole.ROLE_ADMIN, "ORG")
+    private suspend fun joinViaInviteToken(username: String, passwordHash: String, token: String): RegisterResponse {
+        val target = inviteLinkService.resolve(token)
+            ?: throw HttpException(HttpStatus.BAD_REQUEST, "Invalid or expired invite link")
+        val targetId = runCatching { UUID.fromString(target.targetId) }.getOrNull()
+            ?: throw HttpException(HttpStatus.BAD_REQUEST, "Invalid or expired invite link")
+
+        // findById(targetId) guarantees the entity id equals targetId, so the
+        // non-null targetId is used for create/recordUse — no `!!` on entity ids.
+        return when (target.targetType) {
+            JoinRequestService.TargetType.ORG -> {
+                organizationRepository.findById(targetId)
+                    ?: throw HttpException(HttpStatus.BAD_REQUEST, "Invalid or expired invite link")
+                joinRequestService.create(username, passwordHash, JoinRequestService.TargetType.ORG, targetId)
+                recordUseSafely(JoinRequestService.TargetType.ORG, targetId, username, token)
+                RegisterResponse(RegisterStatus.PENDING, AdminRole.ROLE_ADMIN, "ORG")
             }
-            code.startsWith(JoinCodeGenerator.STORE_PREFIX) -> {
-                val store = storeRepository.findByJoinCode(code)
-                    ?: throw HttpException(HttpStatus.BAD_REQUEST, "Invalid join code")
+            JoinRequestService.TargetType.STORE -> {
+                val store = storeRepository.findById(targetId)
+                    ?: throw HttpException(HttpStatus.BAD_REQUEST, "Invalid or expired invite link")
                 if (store.orgId != null)
-                    throw HttpException(HttpStatus.BAD_REQUEST, "Invalid join code")
-                joinRequestService.create(username, passwordHash, JoinRequestService.TargetType.STORE, store.id!!)
-                return RegisterResponse(RegisterStatus.PENDING, AdminRole.ROLE_ADMIN, "STORE")
+                    throw HttpException(HttpStatus.BAD_REQUEST, "Invalid or expired invite link")
+                joinRequestService.create(username, passwordHash, JoinRequestService.TargetType.STORE, targetId)
+                recordUseSafely(JoinRequestService.TargetType.STORE, targetId, username, token)
+                RegisterResponse(RegisterStatus.PENDING, AdminRole.ROLE_ADMIN, "STORE")
             }
-            else -> throw HttpException(HttpStatus.BAD_REQUEST, "Invalid join code")
         }
     }
 
-    private suspend fun generateUniqueOrgCode(): String {
-        repeat(5) {
-            val code = JoinCodeGenerator.generate(JoinCodeGenerator.ORG_PREFIX)
-            if (!organizationRepository.existsByJoinCode(code)) return code
+    /** Best-effort: the usage trail must never fail a registration (defense in depth on top of recordUse's own guarantee). */
+    private suspend fun recordUseSafely(
+        targetType: JoinRequestService.TargetType,
+        targetId: UUID,
+        username: String,
+        token: String
+    ) {
+        try {
+            inviteLinkService.recordUse(targetType, targetId, username, token)
+        } catch (ex: CancellationException) {
+            throw ex
+        } catch (_: Exception) {
+            // logged inside recordUse's own guard when it is the source; swallowed here by design
         }
-        throw IllegalStateException("Could not generate a unique organization join code")
     }
 }

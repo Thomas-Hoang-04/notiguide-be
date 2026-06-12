@@ -1,9 +1,13 @@
 package com.thomas.notiguide.domain.queue.controller
 
 import com.ninjasquad.springmockk.MockkBean
+import com.thomas.notiguide.core.firebase.FcmNotificationService
 import com.thomas.notiguide.core.jwt.JWTAuthFilter
 import com.thomas.notiguide.core.ratelimit.RateLimitFilter
+import com.thomas.notiguide.domain.queue.service.QueueService
 import com.thomas.notiguide.domain.store.dto.StoreDto
+import com.thomas.notiguide.domain.store.service.ServiceTypeService
+import com.thomas.notiguide.domain.store.service.StoreService
 import com.thomas.notiguide.support.TestSecurityConfig
 import io.mockk.coEvery
 import org.junit.jupiter.api.Test
@@ -22,10 +26,10 @@ import java.util.UUID
 )
 @Import(TestSecurityConfig::class)
 class QueuePublicControllerTest {
-    @MockkBean lateinit var queueService: com.thomas.notiguide.domain.queue.service.QueueService
-    @MockkBean lateinit var storeService: com.thomas.notiguide.domain.store.service.StoreService
-    @MockkBean(relaxed = true) lateinit var serviceTypeService: com.thomas.notiguide.domain.store.service.ServiceTypeService
-    @MockkBean(relaxed = true) lateinit var fcmNotificationService: com.thomas.notiguide.core.firebase.FcmNotificationService
+    @MockkBean lateinit var queueService: QueueService
+    @MockkBean lateinit var storeService: StoreService
+    @MockkBean(relaxed = true) lateinit var serviceTypeService: ServiceTypeService
+    @MockkBean(relaxed = true) lateinit var fcmNotificationService: FcmNotificationService
 
     @Autowired lateinit var client: WebTestClient
 

@@ -1,6 +1,5 @@
 package com.thomas.notiguide.domain.organization.entity
 
-import com.thomas.notiguide.domain.organization.dto.OrganizationDto
 import com.thomas.notiguide.domain.organization.dto.OrganizationPublicDto
 import org.springframework.data.annotation.CreatedDate
 import org.springframework.data.annotation.Id
@@ -19,9 +18,6 @@ data class Organization(
     @Column("name")
     val name: String,
 
-    @Column("join_code")
-    val joinCode: String,
-
     @Column("created_by")
     val createdBy: UUID? = null,
 
@@ -33,15 +29,6 @@ data class Organization(
     @Column("updated_at")
     val updatedAt: OffsetDateTime? = null
 ) {
-    fun toDto(): OrganizationDto = OrganizationDto(
-        id = id!!,
-        name = name,
-        joinCode = joinCode,
-        createdBy = createdBy,
-        createdAt = createdAt,
-        updatedAt = updatedAt
-    )
-
     fun toPublicDto(): OrganizationPublicDto = OrganizationPublicDto(
         id = id!!,
         name = name,

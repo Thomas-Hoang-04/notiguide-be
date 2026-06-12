@@ -131,7 +131,7 @@ src/main/kotlin/com/thomas/notiguide/
 │   ├── redis/ ratelimit/ — queue state, TTL policy, Lua sliding-window limiter
 │   ├── mqtt/ firebase/ sse/ — the three notification/live-update channels
 │   ├── device/ store/   — infra halves: command signing + MQTT publishing, slug rules (domain logic lives in domain/)
-│   └── tenant/ database/ config/ exception/ — org/store join codes, R2DBC, app config, error handling
+│   └── tenant/ database/ config/ exception/ — invite tokens, R2DBC, app config, error handling
 ├── domain/              — one package per business domain
 │   ├── queue/           — Lua scripts, ticket lifecycle, public + admin controllers
 │   ├── admin/ organization/ store/ — accounts, orgs, stores, slugs, service types

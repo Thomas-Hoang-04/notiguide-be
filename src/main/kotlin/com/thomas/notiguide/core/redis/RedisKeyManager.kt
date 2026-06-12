@@ -37,6 +37,11 @@ object RedisKeyManager {
     fun joinRequestUsername(usernameLower: String) = "join_request:username:$usernameLower"
     fun joinRequestLock(requestId: String) = "join_request:lock:$requestId"
 
+    fun inviteToken(token: String) = "invite:token:$token"
+    fun inviteActive(targetType: String, targetId: UUID) = "invite:active:$targetType:$targetId"
+    fun inviteLock(targetType: String, targetId: UUID) = "invite:lock:$targetType:$targetId"
+    fun inviteAudit(targetType: String, targetId: UUID) = "invite:audit:$targetType:$targetId"
+
     fun queueState(storeId: UUID) = "store:$storeId:queue_state"
     fun storeSettings(storeId: UUID) = "store:$storeId:settings"
 

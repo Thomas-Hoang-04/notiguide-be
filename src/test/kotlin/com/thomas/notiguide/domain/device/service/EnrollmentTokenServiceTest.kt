@@ -1,6 +1,9 @@
 package com.thomas.notiguide.domain.device.service
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.thomas.notiguide.core.device.DeviceCommandSigningProperties
+import com.thomas.notiguide.domain.store.repository.StoreRepository
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -12,9 +15,9 @@ import reactor.core.publisher.Mono
 
 class EnrollmentTokenServiceTest {
     private val redis = mockk<ReactiveRedisTemplate<String, String>>()
-    private val storeRepository = mockk<com.thomas.notiguide.domain.store.repository.StoreRepository>(relaxed = true)
-    private val storeAccess = mockk<com.thomas.notiguide.shared.principal.StoreAccessService>(relaxed = true)
-    private val properties = mockk<com.thomas.notiguide.core.device.DeviceCommandSigningProperties>(relaxed = true)
+    private val storeRepository = mockk<StoreRepository>(relaxed = true)
+    private val storeAccess = mockk<StoreAccessService>(relaxed = true)
+    private val properties = mockk<DeviceCommandSigningProperties>(relaxed = true)
     private val service = EnrollmentTokenService(redis, storeRepository, storeAccess, jacksonObjectMapper(), properties)
 
     @Test

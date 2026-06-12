@@ -2,6 +2,7 @@ package com.thomas.notiguide.domain.admin.controller
 
 import com.thomas.notiguide.core.config.AppProperties
 import com.thomas.notiguide.core.config.JWTProperties
+import com.thomas.notiguide.core.exception.HttpException
 import com.thomas.notiguide.core.exception.PendingJoinRequestException
 import com.thomas.notiguide.core.exception.UnverifiedAdminException
 import com.thomas.notiguide.core.jwt.JWTManager
@@ -12,10 +13,12 @@ import com.thomas.notiguide.domain.admin.repository.AdminRepository
 import com.thomas.notiguide.domain.admin.request.AbortLoginRequest
 import com.thomas.notiguide.domain.admin.request.LoginRequest
 import com.thomas.notiguide.domain.admin.request.RegisterRequest
+import com.thomas.notiguide.domain.admin.response.InviteResolveResponse
 import com.thomas.notiguide.domain.admin.response.LoginResponse
 import com.thomas.notiguide.domain.admin.types.RegisterStatus
 import com.thomas.notiguide.domain.admin.response.RegisterResponse
 import com.thomas.notiguide.domain.admin.service.AdminService
+import com.thomas.notiguide.domain.admin.service.InviteLinkService
 import com.thomas.notiguide.domain.admin.service.JoinRequestService
 import com.thomas.notiguide.domain.admin.service.RegistrationService
 import com.thomas.notiguide.domain.admin.service.SessionService
@@ -29,6 +32,8 @@ import org.springframework.http.ResponseEntity
 import org.springframework.http.server.reactive.ServerHttpRequest
 import org.springframework.security.authentication.BadCredentialsException
 import org.springframework.security.crypto.password.PasswordEncoder
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -48,7 +53,8 @@ class AuthController(
     private val sessionService: SessionService,
     private val loginAbortService: LoginAbortService,
     private val registrationService: RegistrationService,
-    private val joinRequestService: JoinRequestService
+    private val joinRequestService: JoinRequestService,
+    private val inviteLinkService: InviteLinkService
 ) {
 
     @PostMapping("/register")
@@ -56,6 +62,15 @@ class AuthController(
         val response = registrationService.register(request)
         val status = if (response.status == RegisterStatus.PENDING) HttpStatus.ACCEPTED else HttpStatus.CREATED
         return ResponseEntity.status(status).body(response)
+    }
+
+    @GetMapping("/invite/{token}")
+    suspend fun resolveInvite(@PathVariable token: String): ResponseEntity<InviteResolveResponse> {
+        // Public, read-only, never mints or consumes. Unknown and expired are
+        // indistinguishable by design; the message never echoes the token.
+        val resolved = inviteLinkService.resolveForDisplay(token)
+            ?: throw HttpException(HttpStatus.NOT_FOUND, "Invite link is invalid or has expired")
+        return ResponseEntity.ok(resolved)
     }
 
     @PostMapping("/login")

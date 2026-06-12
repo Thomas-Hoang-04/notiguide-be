@@ -1,10 +1,15 @@
 package com.thomas.notiguide.domain.admin.controller
 
 import com.ninjasquad.springmockk.MockkBean
+import com.thomas.notiguide.core.config.AppProperties
 import com.thomas.notiguide.core.jwt.JWTAuthFilter
+import com.thomas.notiguide.core.jwt.RefreshTokenService
 import com.thomas.notiguide.core.ratelimit.RateLimitFilter
 import com.thomas.notiguide.domain.admin.dto.AdminDto
+import com.thomas.notiguide.domain.admin.service.AdminService
+import com.thomas.notiguide.domain.admin.service.SessionService
 import com.thomas.notiguide.domain.admin.types.AdminRole
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import com.thomas.notiguide.support.TestPrincipals
 import com.thomas.notiguide.support.TestSecurityConfig
 import io.mockk.coEvery
@@ -25,11 +30,11 @@ import java.util.UUID
 )
 @Import(TestSecurityConfig::class)
 class AdminControllerTest {
-    @MockkBean lateinit var adminService: com.thomas.notiguide.domain.admin.service.AdminService
-    @MockkBean(relaxed = true) lateinit var sessionService: com.thomas.notiguide.domain.admin.service.SessionService
-    @MockkBean(relaxed = true) lateinit var refreshTokenService: com.thomas.notiguide.core.jwt.RefreshTokenService
-    @MockkBean(relaxed = true) lateinit var appProperties: com.thomas.notiguide.core.config.AppProperties
-    @MockkBean(relaxed = true) lateinit var storeAccess: com.thomas.notiguide.shared.principal.StoreAccessService
+    @MockkBean lateinit var adminService: AdminService
+    @MockkBean(relaxed = true) lateinit var sessionService: SessionService
+    @MockkBean(relaxed = true) lateinit var refreshTokenService: RefreshTokenService
+    @MockkBean(relaxed = true) lateinit var appProperties: AppProperties
+    @MockkBean(relaxed = true) lateinit var storeAccess: StoreAccessService
 
     @Autowired lateinit var client: WebTestClient
 

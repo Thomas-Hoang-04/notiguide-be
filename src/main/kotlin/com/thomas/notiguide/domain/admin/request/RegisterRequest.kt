@@ -36,5 +36,5 @@ data class RegisterRequest(
     val storeAddress: String? = null,
 
     @field:Size(max = 64)
-    val joinCode: String? = null
+    val inviteToken: String? = null
 )

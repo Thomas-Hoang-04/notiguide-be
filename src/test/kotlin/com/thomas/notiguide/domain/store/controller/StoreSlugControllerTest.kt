@@ -3,7 +3,10 @@ package com.thomas.notiguide.domain.store.controller
 import com.ninjasquad.springmockk.MockkBean
 import com.thomas.notiguide.core.jwt.JWTAuthFilter
 import com.thomas.notiguide.core.ratelimit.RateLimitFilter
+import com.thomas.notiguide.core.exception.ForbiddenException
 import com.thomas.notiguide.domain.store.response.StoreSlugListResponse
+import com.thomas.notiguide.domain.store.service.StoreSlugService
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import com.thomas.notiguide.support.TestPrincipals
 import com.thomas.notiguide.support.TestSecurityConfig
 import io.mockk.coEvery
@@ -23,8 +26,8 @@ import java.util.UUID
 )
 @Import(TestSecurityConfig::class)
 class StoreSlugControllerTest {
-    @MockkBean lateinit var storeSlugService: com.thomas.notiguide.domain.store.service.StoreSlugService
-    @MockkBean lateinit var storeAccess: com.thomas.notiguide.shared.principal.StoreAccessService
+    @MockkBean lateinit var storeSlugService: StoreSlugService
+    @MockkBean lateinit var storeAccess: StoreAccessService
 
     @Autowired lateinit var client: WebTestClient
 
@@ -45,7 +48,7 @@ class StoreSlugControllerTest {
     @Test
     fun `GET slugs returns 403 when store access is denied`() {
         coEvery { storeAccess.requireStoreAccess(any(), any()) } throws
-            com.thomas.notiguide.core.exception.ForbiddenException("forbidden")
+            ForbiddenException("forbidden")
 
         client.mutateWith(mockAuthentication(TestPrincipals.authToken(storeId = storeId)))
             .get().uri("/api/stores/$storeId/slugs")

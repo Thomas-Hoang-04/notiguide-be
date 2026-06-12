@@ -20,13 +20,10 @@ CREATE TYPE admin_role AS ENUM ('ROLE_SUPER_ADMIN', 'ROLE_ADMIN');
 CREATE TABLE organization (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name        TEXT NOT NULL,
-    join_code   TEXT NOT NULL,
     created_by  UUID,  -- FK to admin(id) added at end of file (circular dep)
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
-CREATE UNIQUE INDEX uq_organization_join_code ON organization(join_code);
 
 CREATE TYPE analytics_event_type AS ENUM (
     'TICKET_ISSUED',
@@ -96,13 +93,11 @@ CREATE TABLE store (
     allow_jump_call BOOLEAN DEFAULT FALSE,
     allow_no_show BOOLEAN DEFAULT FALSE,
     org_id UUID REFERENCES organization(id) ON DELETE RESTRICT,
-    join_code TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_store_public_id ON store(public_id);
-CREATE UNIQUE INDEX uq_store_join_code ON store(join_code) WHERE join_code IS NOT NULL;
 CREATE INDEX idx_store_org ON store(org_id);
 
 -- ===== Custom store slugs =====

@@ -28,6 +28,4 @@ interface StoreRepository : CoroutineCrudRepository<Store, UUID> {
     @Query("SELECT id FROM store WHERE org_id = :orgId")
     fun findIdsByOrgId(orgId: UUID): Flow<UUID>
 
-    @Query("SELECT * FROM store WHERE join_code = :joinCode")
-    suspend fun findByJoinCode(joinCode: String): Store?
 }

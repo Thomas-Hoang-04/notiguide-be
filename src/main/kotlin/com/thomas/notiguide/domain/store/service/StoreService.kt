@@ -3,7 +3,6 @@ package com.thomas.notiguide.domain.store.service
 import com.thomas.notiguide.core.exception.ConflictException
 import com.thomas.notiguide.core.exception.NotFoundException
 import com.thomas.notiguide.core.redis.RedisKeyManager
-import com.thomas.notiguide.core.tenant.JoinCodeGenerator
 import com.thomas.notiguide.domain.admin.repository.AdminRepository
 import com.thomas.notiguide.domain.queue.repository.RedisQueueRepository
 import com.thomas.notiguide.domain.queue.service.QueueService
@@ -101,13 +100,10 @@ class StoreService(
         require(request.name.isNotBlank()) { "Store name must not be blank" }
         validateNoShowAction(request.noShowAction)
 
-        val joinCode = if (orgId == null) generateUniqueStoreJoinCode() else null
-
         val store = Store(
             name = request.name,
             address = request.address?.takeIf { it.isNotBlank() },
             orgId = orgId,
-            joinCode = joinCode,
             allowJumpCall = request.allowJumpCall,
             allowNoShow = request.allowNoShow
         )
@@ -194,35 +190,6 @@ class StoreService(
         redis.delete(RedisKeyManager.storeSettings(storeId)).awaitSingleOrNull()
 
         return saved.toDto()
-    }
-
-    @Transactional
-    suspend fun rotateStoreJoinCode(storeId: UUID): String {
-        val store = storeRepository.findById(storeId)
-            ?: throw NotFoundException("Store", "id", storeId.toString())
-        if (store.orgId != null)
-            throw ConflictException("Org-owned stores are joined via the organization code")
-        val code = generateUniqueStoreJoinCode()
-        storeRepository.save(store.copy(joinCode = code))
-        return code
-    }
-
-    @Transactional
-    suspend fun getStoreJoinCode(storeId: UUID): String {
-        val store = storeRepository.findById(storeId)
-            ?: throw NotFoundException("Store", "id", storeId.toString())
-        if (store.orgId != null)
-            throw ConflictException("Org-owned stores are joined via the organization code")
-        return store.joinCode
-            ?: generateUniqueStoreJoinCode().also { storeRepository.save(store.copy(joinCode = it)) }
-    }
-
-    private suspend fun generateUniqueStoreJoinCode(): String {
-        repeat(5) {
-            val code = JoinCodeGenerator.generate(JoinCodeGenerator.STORE_PREFIX)
-            if (storeRepository.findByJoinCode(code) == null) return code
-        }
-        throw IllegalStateException("Could not generate a unique store join code")
     }
 
     private fun validateNoShowAction(noShowAction: String) {

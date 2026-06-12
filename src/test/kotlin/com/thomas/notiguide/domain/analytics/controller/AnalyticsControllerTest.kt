@@ -5,6 +5,8 @@ import com.thomas.notiguide.core.jwt.JWTAuthFilter
 import com.thomas.notiguide.core.ratelimit.RateLimitFilter
 import com.thomas.notiguide.domain.admin.types.AdminRole
 import com.thomas.notiguide.domain.analytics.response.OverviewRealtimeResponse
+import com.thomas.notiguide.domain.analytics.service.AnalyticsQueryService
+import com.thomas.notiguide.shared.principal.StoreAccessService
 import com.thomas.notiguide.support.TestPrincipals
 import com.thomas.notiguide.support.TestSecurityConfig
 import io.mockk.coEvery
@@ -23,8 +25,8 @@ import org.springframework.test.web.reactive.server.WebTestClient
 )
 @Import(TestSecurityConfig::class)
 class AnalyticsControllerTest {
-    @MockkBean lateinit var analyticsQueryService: com.thomas.notiguide.domain.analytics.service.AnalyticsQueryService
-    @MockkBean(relaxed = true) lateinit var storeAccess: com.thomas.notiguide.shared.principal.StoreAccessService
+    @MockkBean lateinit var analyticsQueryService: AnalyticsQueryService
+    @MockkBean(relaxed = true) lateinit var storeAccess: StoreAccessService
 
     @Autowired lateinit var client: WebTestClient
 

@@ -18,4 +18,10 @@ class RedisTTLPolicyTest {
         assertThat(RedisTTLPolicy.REFRESH_TOKEN).isEqualTo(Duration.ofDays(7))
         assertThat(RedisTTLPolicy.JOIN_REQUEST).isEqualTo(Duration.ofDays(7))
     }
+
+    @Test
+    fun `invite link TTLs match the documented policy`() {
+        assertThat(RedisTTLPolicy.INVITE_LINK).isEqualTo(Duration.ofDays(7))
+        assertThat(RedisTTLPolicy.INVITE_AUDIT).isEqualTo(Duration.ofDays(30))
+    }
 }
