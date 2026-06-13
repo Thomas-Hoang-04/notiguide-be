@@ -29,6 +29,11 @@ class JoinRequestService(
 
     enum class TargetType { ORG, STORE }
 
+    sealed interface Approval {
+        data class AsAdmin(val storeId: UUID) : Approval
+        data class AsSuperAdmin(val orgId: UUID) : Approval
+    }
+
     data class JoinRequestPayload(
         val username: String = "",
         val passwordHash: String = "",
@@ -105,9 +110,9 @@ class JoinRequestService(
         return result
     }
 
-    /** Materialize an ADMIN row from a request, then delete the request. */
+    /** Materialize an admin row from a request per the approval decision, then delete the request. */
     @Transactional
-    suspend fun approve(requestId: String, assignStoreId: UUID, verifierId: UUID): Admin {
+    suspend fun approve(requestId: String, approval: Approval, verifierId: UUID): Admin {
         val lockKey = RedisKeyManager.joinRequestLock(requestId)
         val locked = redis.opsForValue().setIfAbsent(lockKey, "1", Duration.ofSeconds(30)).awaitSingle()
         if (!locked) throw ConflictException("Join request is already being processed")
@@ -117,17 +122,30 @@ class JoinRequestService(
                 // Per spec, keep the request so the owner can retry/reject or let it expire.
                 throw ConflictException("Username '${payload.username}' is already taken")
             }
+            val now = OffsetDateTime.now()
             val admin = adminRepository.save(
-                Admin(
-                    username = payload.username,
-                    passwordHash = payload.passwordHash,
-                    role = AdminRole.ROLE_ADMIN,
-                    storeId = assignStoreId,
-                    orgId = null,
-                    isVerified = true,
-                    verifiedBy = verifierId,
-                    verifiedAt = OffsetDateTime.now()
-                )
+                when (approval) {
+                    is Approval.AsAdmin -> Admin(
+                        username = payload.username,
+                        passwordHash = payload.passwordHash,
+                        role = AdminRole.ROLE_ADMIN,
+                        storeId = approval.storeId,
+                        orgId = null,
+                        isVerified = true,
+                        verifiedBy = verifierId,
+                        verifiedAt = now,
+                    )
+                    is Approval.AsSuperAdmin -> Admin(
+                        username = payload.username,
+                        passwordHash = payload.passwordHash,
+                        role = AdminRole.ROLE_SUPER_ADMIN,
+                        storeId = null,
+                        orgId = approval.orgId,
+                        isVerified = true,
+                        verifiedBy = verifierId,
+                        verifiedAt = now,
+                    )
+                },
             )
             deleteKeys(requestId, payload)
             return admin

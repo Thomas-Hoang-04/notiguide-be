@@ -41,37 +41,47 @@ class JoinRequestController(
     @PostMapping("/{requestId}/approve")
     suspend fun approve(
         @PathVariable requestId: String,
+        // Optional body: role defaults to ROLE_ADMIN and the DTO has no field constraints, so no @Valid is needed.
         @RequestBody(required = false) body: ApproveJoinRequest?,
-        @AuthenticationPrincipal principal: AdminPrincipal
+        @AuthenticationPrincipal principal: AdminPrincipal,
     ): ResponseEntity<Void> {
         val payload = joinRequestService.get(requestId)
             ?: throw NotFoundException("JoinRequest", "id", requestId)
+        val role = body?.role ?: AdminRole.ROLE_ADMIN
 
-        val assignStoreId: UUID = when (payload.targetType) {
+        val approval: JoinRequestService.Approval = when (payload.targetType) {
             JoinRequestService.TargetType.ORG -> {
                 val orgId = principal.orgId?.takeIf { isSuperAdmin(principal) }
                     ?: throw ForbiddenException("Only the organization owner can approve this request")
                 if (UUID.fromString(payload.targetId) != orgId)
                     throw ForbiddenException("Request is not for your organization")
-                val storeId = body?.storeId
-                    ?: throw ConflictException("Select a store in your organization to assign")
-                val store = storeRepository.findById(storeId)
-                    ?: throw NotFoundException("Store", "id", storeId.toString())
-                if (store.orgId != orgId)
-                    throw ForbiddenException("Store is not in your organization")
-                storeId
+                when (role) {
+                    AdminRole.ROLE_SUPER_ADMIN -> JoinRequestService.Approval.AsSuperAdmin(orgId)
+                    AdminRole.ROLE_ADMIN -> {
+                        val storeId = body?.storeId
+                            ?: throw ConflictException("Select a store in your organization to assign")
+                        val store = storeRepository.findById(storeId)
+                            ?: throw NotFoundException("Store", "id", storeId.toString())
+                        if (store.orgId != orgId)
+                            throw ForbiddenException("Store is not in your organization")
+                        JoinRequestService.Approval.AsAdmin(storeId)
+                    }
+                }
             }
             JoinRequestService.TargetType.STORE -> {
+                // Invariant: an independent store has no org, so SUPER_ADMIN is impossible here.
+                if (role == AdminRole.ROLE_SUPER_ADMIN)
+                    throw ForbiddenException("An independent store has no organization to own")
                 val storeId = principal.storeId
                     ?: throw ForbiddenException("Only the store's admin can approve this request")
                 if (UUID.fromString(payload.targetId) != storeId)
                     throw ForbiddenException("Request is not for your store")
                 if (!principal.isVerified)
                     throw ForbiddenException("Only a verified admin can approve co-owners")
-                storeId
+                JoinRequestService.Approval.AsAdmin(storeId)
             }
         }
-        joinRequestService.approve(requestId, assignStoreId, principal.id)
+        joinRequestService.approve(requestId, approval, principal.id)
         return ResponseEntity.noContent().build()
     }
 
