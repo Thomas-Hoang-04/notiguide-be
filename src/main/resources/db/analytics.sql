@@ -1,17 +1,20 @@
--- Realistic analytics seed data for 3 stores over the last 30 days (including today).
+-- Realistic analytics seed data for 5 stores over the last 360 days (including today).
 -- Clears existing analytics_event rows for these stores before inserting.
 --
 -- Store profiles (from DB):
 --   Cà phê Bách Khoa  269de397-...-29dd57a105bd  counter c9a5b454-...
 --   Trạm Y tế Bách Khoa  12e4189b-...-5df4cb4d14de  counter 029092de-...
 --   Phúc Long  bafca564-...-46debe727aed  counter 8415c1d0-...
+--   SOICT Coffee  61e2c9d6-...-4755636777bf  counter 1ab61855-...
+--   Generic service  0ce39a24-...-38bad4e803ca  counter 04fd22b8-...
 
 DELETE FROM analytics_event
 WHERE store_id IN (
     '269de397-63d4-4724-b0f2-29dd57a105bd'::uuid,
     '12e4189b-7ac8-4ea0-8bb4-5df4cb4d14de'::uuid,
     'bafca564-bf44-4717-a886-46debe727aed'::uuid,
-    '61e2c9d6-e8b6-4f4f-9d88-4755636777bf'::uuid
+    '61e2c9d6-e8b6-4f4f-9d88-4755636777bf'::uuid,
+    '0ce39a24-2284-44b9-9a2b-38bad4e803ca'::uuid -- Counter ID: 04fd22b8-bbb3-4fcd-91b0-f8e97bc00df8
 );
 
 WITH store_profiles AS (
@@ -77,6 +80,21 @@ WITH store_profiles AS (
                 18,   -- peak_hour_2 (after-class evening rush)
                 7,    -- open_hour
                 22    -- close_hour (late for evening study sessions)
+            ),
+            -- Generic service provider: modest traffic, standard hours, typical wait times
+            (
+                '0ce39a24-2284-44b9-9a2b-38bad4e803ca'::uuid,
+                '04fd22b8-bbb3-4fcd-91b0-f8e97bc00df8'::text,
+                30,   -- base_daily_tickets (modest, steady flow)
+                75,   -- completed_pct
+                14,   -- cancelled_pct
+                11,   -- skipped_pct
+                300,  -- base_wait_sec (~5 min avg)
+                360,  -- base_service_sec (~6 min avg)
+                9,    -- peak_hour_1 (mid-morning)
+                14,   -- peak_hour_2 (early afternoon)
+                8,    -- open_hour
+                17    -- close_hour (standard business hours)
             )
     ) AS v(
         store_id, counter_id,
