@@ -4,5 +4,6 @@ import java.util.UUID
 
 data class IssueDeviceTicketRequest(
     val deviceId: UUID,
-    val serviceTypeId: UUID? = null
+    val serviceTypeId: UUID? = null,
+    val allowSerialFallback: Boolean = false
 )

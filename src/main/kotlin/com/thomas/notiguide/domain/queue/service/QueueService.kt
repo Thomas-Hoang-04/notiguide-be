@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.thomas.notiguide.core.exception.ConflictException
 import com.thomas.notiguide.core.exception.HttpException
 import com.thomas.notiguide.core.exception.NotFoundException
+import com.thomas.notiguide.domain.queue.request.OfflineAction
 import com.thomas.notiguide.core.firebase.FcmNotificationService
 import com.thomas.notiguide.core.mqtt.MqttPublisher
 import com.thomas.notiguide.core.mqtt.MqttPublisher.QueueEvent
@@ -890,6 +891,52 @@ class QueueService(
             ticketId = ticketId,
             ticketNumber = ticketData["number"]
         ))
+    }
+
+    suspend fun reconcileTerminalTransition(
+        storeId: UUID,
+        ticketId: UUID,
+        action: OfflineAction
+    ): String {
+        val ticketData = redisTicketRepository.getTicket(storeId, ticketId)
+        if (ticketData.isEmpty()) return "gone"
+
+        val currentStatus = TicketStatus.from(ticketData["status"])
+        if (currentStatus == TicketStatus.SERVED || currentStatus == TicketStatus.CANCELLED) return "superseded"
+
+        when (action) {
+            OfflineAction.SERVE -> redisTicketRepository.markServed(storeId, ticketId)
+            OfflineAction.CANCEL, OfflineAction.NO_SHOW -> redisTicketRepository.markCancelled(storeId, ticketId)
+        }
+
+        when (currentStatus) {
+            TicketStatus.CALLED -> redisQueueRepository.removeFromServing(storeId, ticketId)
+            else -> {
+                redisQueueRepository.removeFromQueue(storeId, ticketId)
+                redisQueueRepository.removeFromServing(storeId, ticketId)
+            }
+        }
+
+        // Clear the device-busy lock — no dispatch event emitted (offline, device already handled it)
+        parseUuid(ticketData["device_id"])?.let { deviceId ->
+            redis.delete(RedisKeyManager.deviceBusy(deviceId)).awaitSingleOrNull()
+        }
+
+        val sseType = if (action == OfflineAction.SERVE) "TICKET_SERVED" else "TICKET_CANCELLED"
+        queueEventBroadcaster.broadcast(
+            QueueSseEvent(
+                type = sseType,
+                storeId = storeId,
+                ticketId = ticketId,
+                ticketNumber = ticketData["number"]
+            )
+        )
+
+        log.info(
+            "Offline reconcile applied: store={} ticket={} action={} previousStatus={}",
+            storeId, ticketId, action, currentStatus
+        )
+        return "applied"
     }
 
     private suspend fun persistIssuedTicketFields(

@@ -45,7 +45,8 @@ class DispatchReconciliationServiceTest {
             deviceId = deviceId,
             storeId = storeId,
             ticketId = ticketId,
-            ticketNumber = "A001"
+            ticketNumber = "A001",
+            action = "call"
         )
     )
 
@@ -75,6 +76,9 @@ class DispatchReconciliationServiceTest {
         assertThat(event.captured.reason).isEqualTo("ack_timeout")
         assertThat(event.captured.ticketId).isEqualTo(ticketId)
         assertThat(event.captured.ticketNumber).isEqualTo("A001")
+        // Enriched so the web Tier-1 serial fallback can re-dispatch an ack-timeout.
+        assertThat(event.captured.deviceId).isEqualTo(deviceId)
+        assertThat(event.captured.dispatchAction).isEqualTo("call")
     }
 
     @Test

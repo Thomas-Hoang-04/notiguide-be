@@ -74,7 +74,9 @@ class DispatchReconciliationService(
                 storeId = tracking.storeId,
                 ticketId = tracking.ticketId,
                 ticketNumber = tracking.ticketNumber,
-                reason = reason
+                reason = reason,
+                deviceId = tracking.deviceId,
+                dispatchAction = tracking.action
             )
         )
         log.warn(

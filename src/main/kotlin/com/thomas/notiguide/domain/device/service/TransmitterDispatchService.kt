@@ -75,6 +75,12 @@ class TransmitterDispatchService(
         scope.cancel()
     }
 
+    private fun dispatchActionOf(type: DeviceDispatchEventType): String =
+        when (type) {
+            DeviceDispatchEventType.DEVICE_CALL_REQUESTED -> "call"
+            DeviceDispatchEventType.DEVICE_STOP_REQUESTED -> "stop"
+        }
+
     private suspend fun handle(event: DeviceDispatchEvent) {
         val hub = transmitterElectionService.electActive(event.storeId)
         if (hub == null) {
@@ -234,7 +240,9 @@ class TransmitterDispatchService(
                 storeId = event.storeId,
                 ticketId = event.ticketId,
                 ticketNumber = event.ticketNumber,
-                reason = reason
+                reason = reason,
+                deviceId = event.deviceId,
+                dispatchAction = dispatchActionOf(event.type)
             )
         )
     }
@@ -311,7 +319,8 @@ class TransmitterDispatchService(
                     deviceId = event.deviceId,
                     storeId = event.storeId,
                     ticketId = event.ticketId,
-                    ticketNumber = event.ticketNumber
+                    ticketNumber = event.ticketNumber,
+                    action = dispatchActionOf(event.type)
                 )
             )
             redis.opsForValue()

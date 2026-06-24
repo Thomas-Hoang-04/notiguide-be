@@ -11,5 +11,7 @@ data class DispatchTrackingRecord(
     @field:JsonProperty("ticket_id")
     val ticketId: UUID,
     @field:JsonProperty("ticket_number")
-    val ticketNumber: String? = null
+    val ticketNumber: String? = null,
+    @field:JsonProperty("action")
+    val action: String? = null
 )

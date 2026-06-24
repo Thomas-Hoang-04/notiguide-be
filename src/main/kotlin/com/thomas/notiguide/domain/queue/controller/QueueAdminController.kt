@@ -9,6 +9,9 @@ import com.thomas.notiguide.domain.queue.response.QueueSizeResponse
 import com.thomas.notiguide.domain.queue.dto.TicketDto
 import com.thomas.notiguide.domain.queue.response.TicketStatusResponse
 import com.thomas.notiguide.domain.queue.request.IssueDeviceTicketRequest
+import com.thomas.notiguide.domain.queue.request.ReconcileOfflineRequest
+import com.thomas.notiguide.domain.queue.response.ReconcileOfflineResponse
+import com.thomas.notiguide.domain.queue.service.OfflineReconciliationService
 import com.thomas.notiguide.domain.queue.service.QueueService
 import com.thomas.notiguide.domain.queue.types.CallNextResult
 import com.thomas.notiguide.domain.queue.types.QueueState
@@ -41,7 +44,8 @@ class QueueAdminController(
     private val queueService: QueueService,
     private val queueEventBroadcaster: QueueEventBroadcaster,
     private val deviceDispatchService: DeviceDispatchService,
-    private val storeAccess: StoreAccessService
+    private val storeAccess: StoreAccessService,
+    private val offlineReconciliationService: OfflineReconciliationService
 ) {
 
     @GetMapping("/size")
@@ -83,7 +87,8 @@ class QueueAdminController(
         val ticket = deviceDispatchService.issueDeviceTicket(
             storeId = storeId,
             deviceId = request.deviceId,
-            serviceTypeId = request.serviceTypeId
+            serviceTypeId = request.serviceTypeId,
+            allowSerialFallback = request.allowSerialFallback
         )
         return ResponseEntity.status(HttpStatus.CREATED).body(ticket)
     }
@@ -203,6 +208,14 @@ class QueueAdminController(
         val cleaned = queueService.cleanupServingSet(storeId)
         return ResponseEntity.ok(mapOf("cleanedEntries" to cleaned))
     }
+
+    @PostMapping("/reconcile-offline")
+    suspend fun reconcileOffline(
+        @PathVariable storeId: UUID,
+        @Valid @RequestBody request: ReconcileOfflineRequest,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<ReconcileOfflineResponse> =
+        ResponseEntity.ok(offlineReconciliationService.reconcile(storeId, request, principal))
 
     @GetMapping("/events", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     fun streamQueueEvents(

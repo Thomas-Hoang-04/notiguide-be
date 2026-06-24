@@ -36,10 +36,13 @@ class DeviceDispatchService(
     suspend fun issueDeviceTicket(
         storeId: UUID,
         deviceId: UUID,
-        serviceTypeId: UUID?
+        serviceTypeId: UUID?,
+        allowSerialFallback: Boolean = false
     ): TicketDto {
-        transmitterElectionServiceProvider.ifAvailable?.electActive(storeId)
-            ?: throw DeviceConflictEnvelopeException("no_active_transmitter")
+        val elected = transmitterElectionServiceProvider.ifAvailable?.electActive(storeId)
+        if (elected == null && !allowSerialFallback) {
+            throw DeviceConflictEnvelopeException("no_active_transmitter")
+        }
         val device = loadDispatchableDevice(storeId, deviceId)
 
         val busyKey = RedisKeyManager.deviceBusy(device.id)

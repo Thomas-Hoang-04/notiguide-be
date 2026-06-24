@@ -6,6 +6,7 @@ import com.thomas.notiguide.core.jwt.JWTAuthFilter
 import com.thomas.notiguide.core.ratelimit.RateLimitFilter
 import com.thomas.notiguide.core.sse.QueueEventBroadcaster
 import com.thomas.notiguide.domain.device.service.DeviceDispatchService
+import com.thomas.notiguide.domain.queue.service.OfflineReconciliationService
 import com.thomas.notiguide.domain.queue.service.QueueService
 import com.thomas.notiguide.shared.principal.StoreAccessService
 import com.thomas.notiguide.support.TestPrincipals
@@ -32,6 +33,7 @@ class QueueAdminControllerTest {
     @MockkBean(relaxed = true) lateinit var broadcaster: QueueEventBroadcaster
     @MockkBean(relaxed = true) lateinit var dispatchService: DeviceDispatchService
     @MockkBean lateinit var storeAccess: StoreAccessService
+    @MockkBean(relaxed = true) lateinit var offlineReconciliationService: OfflineReconciliationService
 
     @Autowired lateinit var client: WebTestClient
 

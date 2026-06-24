@@ -14,16 +14,6 @@ import reactor.core.publisher.Flux
 import reactor.core.publisher.Sinks
 import java.util.UUID
 
-data class QueueSseEvent(
-    val type: String,
-    val storeId: UUID,
-    val ticketId: UUID,
-    val ticketNumber: String? = null,
-    val counterId: String? = null,
-    val reason: String? = null,
-    val timestamp: Long = System.currentTimeMillis()
-)
-
 @Component
 class QueueEventBroadcaster(
     private val objectMapper: ObjectMapper,
