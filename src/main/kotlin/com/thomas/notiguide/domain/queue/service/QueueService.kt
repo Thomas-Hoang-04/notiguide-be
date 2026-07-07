@@ -996,12 +996,7 @@ class QueueService(
             return true
         }
 
-        storeBusyTicketBinding(
-            storeId = storeId,
-            ticketId = ticketId,
-            deviceId = deviceId,
-            ttl = RedisTTLPolicy.TICKET_TERMINAL
-        )
+        redis.delete(RedisKeyManager.deviceBusy(deviceId)).awaitSingleOrNull()
         emitDeviceDispatchEvent(
             type = DeviceDispatchEventType.DEVICE_STOP_REQUESTED,
             storeId = storeId,
@@ -1020,16 +1015,22 @@ class QueueService(
         disposition: DeviceDispatchStopDisposition
     ): Boolean {
         val deviceId = parseUuid(ticketData["device_id"]) ?: return false
-        val ttl = when (disposition) {
-            DeviceDispatchStopDisposition.RELEASE -> RedisTTLPolicy.TICKET_TERMINAL
-            DeviceDispatchStopDisposition.REQUEUE -> RedisTTLPolicy.TICKET_WAITING
+        when (disposition) {
+            // RELEASE: the ticket is terminal — free the device now instead of waiting on
+            // a successful transmitter publish, so it returns to the available list even
+            // when the hub is only reachable over the USB serial fallback.
+            DeviceDispatchStopDisposition.RELEASE ->
+                redis.delete(RedisKeyManager.deviceBusy(deviceId)).awaitSingleOrNull()
+            // REQUEUE: the ticket goes back into the queue still bound to this device, so
+            // keep the device reserved until that ticket is served or cancelled.
+            DeviceDispatchStopDisposition.REQUEUE ->
+                storeBusyTicketBinding(
+                    storeId = storeId,
+                    ticketId = ticketId,
+                    deviceId = deviceId,
+                    ttl = RedisTTLPolicy.TICKET_WAITING
+                )
         }
-        storeBusyTicketBinding(
-            storeId = storeId,
-            ticketId = ticketId,
-            deviceId = deviceId,
-            ttl = ttl
-        )
         emitDeviceDispatchEvent(
             type = DeviceDispatchEventType.DEVICE_STOP_REQUESTED,
             storeId = storeId,
