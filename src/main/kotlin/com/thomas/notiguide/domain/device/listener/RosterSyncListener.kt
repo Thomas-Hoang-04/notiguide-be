@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.thomas.notiguide.core.device.DeviceCanonical
 import com.thomas.notiguide.core.device.DeviceCommandSigner
 import com.thomas.notiguide.core.device.DeviceMqttPublisher
+import com.thomas.notiguide.core.device.DevicePublicIdMinter
 import com.thomas.notiguide.core.mqtt.MqttClientManager
 import com.thomas.notiguide.core.mqtt.MqttMessageHandler
 import com.thomas.notiguide.core.mqtt.MqttProperties
@@ -38,7 +39,8 @@ class RosterSyncListener(
     private val objectMapper: ObjectMapper,
     private val client: DatabaseClient,
     private val publisherProvider: ObjectProvider<DeviceMqttPublisher>,
-    private val signerProvider: ObjectProvider<DeviceCommandSigner>
+    private val signerProvider: ObjectProvider<DeviceCommandSigner>,
+    private val publicIdMinter: DevicePublicIdMinter
 ) : SmartInitializingSingleton {
 
     private val log = LoggerFactory.getLogger(this::class.java)
@@ -165,7 +167,7 @@ class RosterSyncListener(
 
         val existing = client.sql(
             """
-            SELECT id FROM device
+            SELECT id, public_id FROM device
             WHERE store_id = :storeId
               AND hub_slot = :hubSlot
             LIMIT 1
@@ -173,43 +175,52 @@ class RosterSyncListener(
         )
             .bind("storeId", storeId)
             .bind("hubSlot", hubSlot)
-            .map { row -> row.get("id", UUID::class.java)!! }
+            .map(::mapRosterReceiverRecord)
             .one()
             .awaitSingleOrNull()
 
         if (existing != null) {
+            val publicId = existing.publicId ?: publicIdMinter.mint(kind)
             client.sql(
                 """
                 UPDATE device
                 SET kind = :kind::device_kind,
                     status = 'ACTIVE'::device_status,
                     assigned_name = :label,
+                    public_id = :publicId,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id
                 """
             )
-                .bind("id", existing)
+                .bind("id", existing.deviceId)
                 .bind("kind", kind.name)
                 .bind("label", label ?: "Slot $hubSlot")
+                .bind("publicId", publicId)
                 .fetch()
                 .rowsUpdated()
                 .awaitSingle()
         } else {
             client.sql(
                 """
-                INSERT INTO device (hub_slot, kind, status, assigned_name, store_id)
-                VALUES (:hubSlot, :kind::device_kind, 'ACTIVE'::device_status, :label, :storeId)
+                INSERT INTO device (hub_slot, kind, status, assigned_name, store_id, public_id)
+                VALUES (:hubSlot, :kind::device_kind, 'ACTIVE'::device_status, :label, :storeId, :publicId)
                 """
             )
                 .bind("hubSlot", hubSlot)
                 .bind("kind", kind.name)
                 .bind("label", label ?: "Slot $hubSlot")
                 .bind("storeId", storeId)
+                .bind("publicId", publicIdMinter.mint(kind))
                 .fetch()
                 .rowsUpdated()
                 .awaitSingle()
         }
     }
+
+    private fun mapRosterReceiverRecord(row: Readable): RosterReceiverRecord = RosterReceiverRecord(
+        deviceId = row.get("id", UUID::class.java)!!,
+        publicId = row.get("public_id", String::class.java)
+    )
 
     private suspend fun deleteUnpairedReceivers(storeId: UUID, activeSlots: List<Short>) {
         if (activeSlots.isEmpty()) {
@@ -302,6 +313,11 @@ private data class HubRecord(
     val deviceId: UUID,
     val storeId: UUID?,
     val lastRosterSeq: Int?
+)
+
+private data class RosterReceiverRecord(
+    val deviceId: UUID,
+    val publicId: String?
 )
 
 private data class RosterUpdateEnvelope(
