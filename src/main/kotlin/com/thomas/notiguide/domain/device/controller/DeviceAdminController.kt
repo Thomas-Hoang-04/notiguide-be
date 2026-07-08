@@ -9,6 +9,7 @@ import com.thomas.notiguide.domain.device.request.ApproveDeviceRequest
 import com.thomas.notiguide.domain.device.request.DeviceLifecycleRequest
 import com.thomas.notiguide.domain.device.request.PassiveDeviceRegistrationRequest
 import com.thomas.notiguide.domain.device.request.RenameDeviceRequest
+import com.thomas.notiguide.domain.device.request.RosterRelayRequest
 import com.thomas.notiguide.domain.device.request.RotateRfCodeRequest
 import com.thomas.notiguide.domain.device.request.DeviceDiagnosticsRelayRequest
 import com.thomas.notiguide.domain.device.request.UsbDispatchPayloadRequest
@@ -20,6 +21,7 @@ import com.thomas.notiguide.domain.device.service.DeviceQueryService
 import com.thomas.notiguide.domain.device.service.PassiveDeviceRegistrationService
 import com.thomas.notiguide.domain.device.service.RfCodeService
 import com.thomas.notiguide.domain.device.service.HubDiagnosticsService
+import com.thomas.notiguide.domain.device.service.RosterApplyService
 import com.thomas.notiguide.domain.device.service.UsbDispatchPayloadService
 import com.thomas.notiguide.domain.device.types.DeviceKind
 import com.thomas.notiguide.shared.principal.AdminPrincipal
@@ -48,6 +50,7 @@ class DeviceAdminController(
     private val deviceLifecycleService: DeviceLifecycleService,
     private val usbDispatchPayloadService: UsbDispatchPayloadService,
     private val hubDiagnosticsService: HubDiagnosticsService,
+    private val rosterApplyService: RosterApplyService,
     private val storeAccess: StoreAccessService
 ) {
 
@@ -165,6 +168,25 @@ class DeviceAdminController(
         }
         hubDiagnosticsService.relayUsbDiagnostics(device, request)
         return ResponseEntity.noContent().build()
+    }
+
+    @PostMapping("/{id}/roster/relay")
+    suspend fun relayRoster(
+        @PathVariable id: UUID,
+        @Valid @RequestBody request: RosterRelayRequest,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<Map<String, Boolean>> {
+        val outcome = rosterApplyService.relay(
+            hubDeviceId = id,
+            seq = request.seq,
+            receivers = request.receivers.map {
+                RosterApplyService.RosterReceiver(slot = it.slot, band = it.band, label = it.label)
+            },
+            principal = principal
+        )
+        return ResponseEntity.ok(
+            mapOf("applied" to (outcome == RosterApplyService.Outcome.APPLIED))
+        )
     }
 
     @GetMapping("/hub-health")
