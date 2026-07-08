@@ -134,6 +134,17 @@ class QueueAdminController(
         }
     }
 
+    @PostMapping("/tickets/{ticketId}/re-page")
+    suspend fun rePageTicket(
+        @PathVariable storeId: UUID,
+        @PathVariable ticketId: UUID,
+        @AuthenticationPrincipal principal: AdminPrincipal
+    ): ResponseEntity<Void> {
+        storeAccess.requireStoreAccess(principal, storeId)
+        queueService.rePageDevice(storeId, ticketId)
+        return ResponseEntity.noContent().build()
+    }
+
     @PostMapping("/tickets/{ticketId}/serve")
     suspend fun serveTicket(
         @PathVariable storeId: UUID,

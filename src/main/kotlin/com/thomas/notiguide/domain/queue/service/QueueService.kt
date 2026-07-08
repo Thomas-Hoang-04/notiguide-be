@@ -654,6 +654,21 @@ class QueueService(
         redis.delete(RedisKeyManager.graceExpiry(storeId, ticketId)).awaitSingleOrNull()
     }
 
+    suspend fun rePageDevice(storeId: UUID, ticketId: UUID) {
+        val ticket = redisTicketRepository.getTicket(storeId, ticketId)
+        if (ticket.isEmpty()) {
+            throw NotFoundException("Ticket", "id", ticketId.toString())
+        }
+        if (TicketStatus.from(ticket["status"]) != TicketStatus.CALLED) {
+            throw ConflictException("Ticket is not currently called")
+        }
+        val dispatched = handleCalledTicketDispatch(storeId, ticketId, ticket)
+        if (!dispatched) {
+            throw ConflictException("Ticket is not bound to a device")
+        }
+        log.info("Ticket re-paged: store={} ticket={}", storeId, ticketId)
+    }
+
     suspend fun cleanupServingSet(storeId: UUID): Int {
         var cleaned = 0
         val servingTickets = redisQueueRepository.getServingTickets(storeId).toList()
