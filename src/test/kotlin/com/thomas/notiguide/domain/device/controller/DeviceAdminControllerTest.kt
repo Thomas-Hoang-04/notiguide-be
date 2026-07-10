@@ -10,6 +10,7 @@ import com.thomas.notiguide.domain.device.service.DeviceQueryService
 import com.thomas.notiguide.domain.device.service.HubDiagnosticsService
 import com.thomas.notiguide.domain.device.service.PassiveDeviceRegistrationService
 import com.thomas.notiguide.domain.device.service.RfCodeService
+import com.thomas.notiguide.domain.device.service.RosterApplyService
 import com.thomas.notiguide.domain.device.service.UsbDispatchPayloadService
 import com.thomas.notiguide.shared.principal.StoreAccessService
 import com.thomas.notiguide.support.TestPrincipals
@@ -39,6 +40,7 @@ class DeviceAdminControllerTest {
     @MockkBean(relaxed = true) lateinit var deviceLifecycleService: DeviceLifecycleService
     @MockkBean(relaxed = true) lateinit var usbDispatchPayloadService: UsbDispatchPayloadService
     @MockkBean(relaxed = true) lateinit var hubDiagnosticsService: HubDiagnosticsService
+    @MockkBean(relaxed = true) lateinit var rosterApplyService: RosterApplyService
     @MockkBean lateinit var storeAccess: StoreAccessService
 
     @Autowired lateinit var client: WebTestClient

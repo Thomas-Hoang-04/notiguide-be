@@ -20,7 +20,7 @@ object RedisKeyManager {
     fun loginAbortLock(token: String) = "auth:abort:lock:$token"
     fun enrollmentToken(sha256Hex: String) = "enroll:$sha256Hex"
     fun enrollmentTokenPattern() = "enroll:*"
-    fun deviceActivation(challengeId: UUID) = "device:activation:$challengeId"
+    fun deviceActivation(registrationNonce: String) = "device:activation:$registrationNonce"
     fun deviceActivationByDevice(deviceId: UUID) = "device:activation-by-device:$deviceId"
     fun devicePriorPublicId(deviceId: UUID) = "device:prior-public-id:$deviceId"
     fun deviceLifecycleCommand(deviceId: UUID) = "device:lifecycle:$deviceId"

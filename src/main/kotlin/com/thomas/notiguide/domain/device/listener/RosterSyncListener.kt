@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.thomas.notiguide.core.device.DeviceCanonical
 import com.thomas.notiguide.core.device.DeviceCommandSigner
 import com.thomas.notiguide.core.device.DeviceMqttPublisher
+import com.thomas.notiguide.core.device.DeviceSignatureVerifier
 import com.thomas.notiguide.core.mqtt.MqttClientManager
 import com.thomas.notiguide.core.mqtt.MqttMessageHandler
 import com.thomas.notiguide.core.mqtt.MqttProperties
@@ -93,6 +94,23 @@ class RosterSyncListener(
             return
         }
 
+        val publicKeyDer = hub.publicKeyDer
+        if (publicKeyDer == null) {
+            log.warn("Roster update for hub {} with no stored public key; dropping", publicId)
+            return
+        }
+        val canonical = DeviceCanonical.rosterUpdate(
+            hubPublicId = publicId,
+            seq = roster.seq,
+            receivers = roster.receivers.map {
+                DeviceCanonical.RosterCanonicalReceiver(slot = it.slot, band = it.band, label = it.label ?: "")
+            }
+        )
+        if (!DeviceSignatureVerifier.verify(publicKeyDer, canonical, roster.signatureB64)) {
+            log.warn("Dropping roster update with invalid signature for hub {}", publicId)
+            return
+        }
+
         val outcome = rosterApplyService.apply(
             hubDeviceId = hub.deviceId,
             storeId = hub.storeId,
@@ -119,7 +137,7 @@ class RosterSyncListener(
     private suspend fun lookupHub(publicId: String): HubRecord? =
         client.sql(
             """
-            SELECT id, store_id, last_roster_seq
+            SELECT id, store_id, last_roster_seq, public_key_der
             FROM device
             WHERE public_id = :publicId
               AND kind = 'TRANSMITTER_HUB'
@@ -134,7 +152,8 @@ class RosterSyncListener(
     private fun mapHubRecord(row: Readable): HubRecord = HubRecord(
         deviceId = row.get("id", UUID::class.java)!!,
         storeId = row.get("store_id", UUID::class.java),
-        lastRosterSeq = row.get("last_roster_seq", Int::class.javaObjectType)
+        lastRosterSeq = row.get("last_roster_seq", Int::class.javaObjectType),
+        publicKeyDer = row.get("public_key_der", ByteArray::class.java)
     )
 
     private suspend fun publishAck(hubPublicId: String, seq: Int) {
@@ -163,17 +182,22 @@ class RosterSyncListener(
 
 }
 
-private data class HubRecord(
+// Plain class (not data class): holds a ByteArray whose array-identity equals/hashCode would be
+// misleading, and no destructuring/copy/equality is used on it.
+private class HubRecord(
     val deviceId: UUID,
     val storeId: UUID?,
-    val lastRosterSeq: Int?
+    val lastRosterSeq: Int?,
+    val publicKeyDer: ByteArray?
 )
 
 private data class RosterUpdateEnvelope(
     @field:JsonProperty("schema_version")
     val schemaVersion: Int = 0,
     val seq: Int = 0,
-    val receivers: List<RosterReceiverEntry> = emptyList()
+    val receivers: List<RosterReceiverEntry> = emptyList(),
+    @field:JsonProperty("signature_b64")
+    val signatureB64: String = ""
 )
 
 private data class RosterReceiverEntry(

@@ -5,11 +5,11 @@ import java.util.UUID
 
 object DeviceCanonical {
     fun activate(
-        challengeId: UUID,
+        registrationNonce: String,
         nonce: String,
         issuedAt: OffsetDateTime,
         expiresAt: OffsetDateTime
-    ): String = "activate-v1|$challengeId|$nonce|${issuedAt.toInstant()}|${expiresAt.toInstant()}"
+    ): String = "activate-v1|$registrationNonce|$nonce|${issuedAt.toInstant()}|${expiresAt.toInstant()}"
 
     fun rfCode(
         publicId: String,
@@ -50,4 +50,36 @@ object DeviceCanonical {
         action: String,
         issuedAt: OffsetDateTime
     ): String = "dispatch-v1|$hubPublicId|$dispatchId|$slot|$action|${issuedAt.toInstant()}"
+
+    data class RosterCanonicalReceiver(val slot: Int, val band: String, val label: String)
+
+    fun rosterUpdate(
+        hubPublicId: String,
+        seq: Int,
+        receivers: List<RosterCanonicalReceiver>
+    ): String {
+        val head = "roster-update-v1|$hubPublicId|$seq"
+        if (receivers.isEmpty()) return head
+        val body = receivers.sortedBy { it.slot }
+            .joinToString("|") { "${it.slot}:${it.band}:${it.label}" }
+        return "$head|$body"
+    }
+
+    fun ack(
+        hubPublicId: String,
+        ackFor: String,
+        id: String,
+        status: String
+    ): String = "ack-v1|$hubPublicId|$ackFor|$id|$status"
+
+    fun heartbeat(
+        hubPublicId: String,
+        issuedAtRaw: String,
+        heapPct: Int,
+        rssi: String,
+        uptimeMs: Long,
+        dispD: Long,
+        dispT: Long,
+        ip: String
+    ): String = "heartbeat-v1|$hubPublicId|$issuedAtRaw|$heapPct|$rssi|$uptimeMs|$dispD|$dispT|$ip"
 }

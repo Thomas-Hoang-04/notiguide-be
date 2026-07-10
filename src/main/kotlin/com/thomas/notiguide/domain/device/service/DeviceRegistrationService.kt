@@ -51,16 +51,22 @@ class DeviceRegistrationService(
         payload: String,
         family: DeviceFamily
     ) {
-        val challengeId = UUID.randomUUID()
-
         val registration = when (family) {
-            DeviceFamily.RECEIVER -> parseReceiverRegistration(payload, challengeId)
-            DeviceFamily.TRANSMITTER -> parseTransmitterRegistration(payload, challengeId)
+            DeviceFamily.RECEIVER -> parseReceiverRegistration(payload)
+            DeviceFamily.TRANSMITTER -> parseTransmitterRegistration(payload)
         } ?: return
+
+        // nonce_in_use guard — BEFORE consuming the token, so a rejected hub can retry with
+        // a fresh nonce and re-present the same (unconsumed) token.
+        val activationKey = RedisKeyManager.deviceActivation(registration.registrationNonce)
+        if (redis.hasKey(activationKey).awaitSingle()) {
+            handleExistingNonce(family, registration, activationKey)
+            return
+        }
 
         val enrollmentRecord = enrollmentTokenService.consume(registration.enrollmentToken)
         if (enrollmentRecord == null) {
-            deviceMqttPublisher.publishRejected(family, challengeId, "invalid_token")
+            deviceMqttPublisher.publishRejected(family, registration.registrationNonce, "invalid_token")
             return
         }
 
@@ -70,7 +76,7 @@ class DeviceRegistrationService(
                 publicKeyDer = registration.publicKeyDer
             )
             if (count >= deviceTransmitterProperties.maxRegisteredPerStore) {
-                deviceMqttPublisher.publishRejected(family, challengeId, "hub_cap_reached")
+                deviceMqttPublisher.publishRejected(family, registration.registrationNonce, "hub_cap_reached")
                 return
             }
         }
@@ -111,22 +117,50 @@ class DeviceRegistrationService(
             expiresAt = expiresAt,
             status = DeviceActivationStatus.PENDING
         )
-        val activationByDevice = DeviceActivationByDeviceRecord(challengeId = challengeId)
+        val activationByDevice = DeviceActivationByDeviceRecord(registrationNonce = registration.registrationNonce)
         val activationJson = objectMapper.writeValueAsString(activationRecord)
         val activationByDeviceJson = objectMapper.writeValueAsString(activationByDevice)
 
-        writeActivationKeys(saved.id, challengeId, activationJson, activationByDeviceJson)
+        writeActivationKeys(saved.id, registration.registrationNonce, activationJson, activationByDeviceJson)
         deviceMqttPublisher.publishPending(
             family = family,
-            challengeId = challengeId,
             registrationNonce = registration.registrationNonce,
             issuedAt = now
         )
     }
 
+    // A QoS-1 register can be redelivered across a reconnect (same nonce, same key). If the stored
+    // activation belongs to the same device, treat it as an idempotent duplicate: re-publish the
+    // same pending response without consuming another token or overwriting the record. A different
+    // key on the same nonce is a genuine collision and stays rejected as nonce_in_use.
+    private suspend fun handleExistingNonce(
+        family: DeviceFamily,
+        registration: ParsedRegistration,
+        activationKey: String
+    ) {
+        val existing = loadActivationRecord(activationKey)
+        if (existing != null && existing.publicKeyFingerprint == sha256Hex(registration.publicKeyDer)) {
+            deviceMqttPublisher.publishPending(
+                family = family,
+                registrationNonce = registration.registrationNonce,
+                issuedAt = existing.issuedAt
+            )
+            return
+        }
+        deviceMqttPublisher.publishRejected(family, registration.registrationNonce, "nonce_in_use")
+    }
+
+    private suspend fun loadActivationRecord(activationKey: String): DeviceActivationRecord? {
+        val json = redis.opsForValue().get(activationKey).awaitSingleOrNull() ?: return null
+        return runCatching { objectMapper.readValue(json, DeviceActivationRecord::class.java) }
+            .getOrElse {
+                log.warn("Ignoring malformed activation record for key {}", activationKey, it)
+                null
+            }
+    }
+
     private suspend fun parseReceiverRegistration(
-        payload: String,
-        challengeId: UUID
+        payload: String
     ): ParsedRegistration? {
         val request = runCatching { objectMapper.readValue(payload, ReceiverBootstrapRegistration::class.java) }
             .getOrElse {
@@ -134,15 +168,16 @@ class DeviceRegistrationService(
                 return null
             }
 
-        if (request.schemaVersion != 1 || request.firmwareVersion.isBlank() || !isValidRegistrationNonce(request.registrationNonce)) {
+        val nonceValid = isValidRegistrationNonce(request.registrationNonce)
+        if (request.schemaVersion != 1 || request.firmwareVersion.isBlank() || !nonceValid) {
             log.warn("Ignoring invalid receiver registration payload: schemaVersion={} firmwareBlank={} nonceValid={}",
-                request.schemaVersion, request.firmwareVersion.isBlank(), isValidRegistrationNonce(request.registrationNonce))
+                request.schemaVersion, request.firmwareVersion.isBlank(), nonceValid)
             return null
         }
 
         val kind = runCatching { DeviceKind.valueOf(request.receiverType) }.getOrNull()
         if (kind == null || kind == DeviceKind.TRANSMITTER_HUB || kind == DeviceKind.RECEIVER_433M_PASSIVE) {
-            deviceMqttPublisher.publishRejected(DeviceFamily.RECEIVER, challengeId, "model_radio_mismatch")
+            deviceMqttPublisher.publishRejected(DeviceFamily.RECEIVER, request.registrationNonce, "model_radio_mismatch")
             return null
         }
 
@@ -157,8 +192,7 @@ class DeviceRegistrationService(
     }
 
     private suspend fun parseTransmitterRegistration(
-        payload: String,
-        challengeId: UUID
+        payload: String
     ): ParsedRegistration? {
         val request = runCatching { objectMapper.readValue(payload, TransmitterBootstrapRegistration::class.java) }
             .getOrElse {
@@ -166,15 +200,16 @@ class DeviceRegistrationService(
                 return null
             }
 
-        if (request.schemaVersion != 1 || request.firmwareVersion.isBlank() || !isValidRegistrationNonce(request.registrationNonce)) {
+        val nonceValid = isValidRegistrationNonce(request.registrationNonce)
+        if (request.schemaVersion != 1 || request.firmwareVersion.isBlank() || !nonceValid) {
             log.warn("Ignoring invalid transmitter registration payload: schemaVersion={} firmwareBlank={} nonceValid={}",
-                request.schemaVersion, request.firmwareVersion.isBlank(), isValidRegistrationNonce(request.registrationNonce))
+                request.schemaVersion, request.firmwareVersion.isBlank(), nonceValid)
             return null
         }
 
         val kind = runCatching { DeviceKind.valueOf(request.kind) }.getOrNull()
         if (kind != DeviceKind.TRANSMITTER_HUB) {
-            deviceMqttPublisher.publishRejected(DeviceFamily.TRANSMITTER, challengeId, "model_radio_mismatch")
+            deviceMqttPublisher.publishRejected(DeviceFamily.TRANSMITTER, request.registrationNonce, "model_radio_mismatch")
             return null
         }
 
@@ -190,12 +225,12 @@ class DeviceRegistrationService(
 
     private suspend fun writeActivationKeys(
         deviceId: UUID,
-        challengeId: UUID,
+        registrationNonce: String,
         activationJson: String,
         activationByDeviceJson: String
     ) {
         val ttl = Duration.ofMinutes(15)
-        val activationKey = RedisKeyManager.deviceActivation(challengeId)
+        val activationKey = RedisKeyManager.deviceActivation(registrationNonce)
         val activationByDeviceKey = RedisKeyManager.deviceActivationByDevice(deviceId)
 
         redis.opsForValue()
@@ -236,7 +271,7 @@ class DeviceRegistrationService(
 
     private fun isValidRegistrationNonce(value: String): Boolean {
         val decoded = runCatching { Base64.getUrlDecoder().decode(value) }.getOrNull() ?: return false
-        return decoded.size >= 8
+        return decoded.size >= 16
     }
 
     private fun sha256Hex(bytes: ByteArray): String =

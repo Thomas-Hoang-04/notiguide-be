@@ -81,7 +81,7 @@ class DeviceApprovalService(
         }
 
         val challengeLink = readActivationByDevice(device.id!!)
-        val activationRecord = readActivationRecord(challengeLink.challengeId)
+        val activationRecord = readActivationRecord(challengeLink.registrationNonce)
         val now = OffsetDateTime.now(ZoneOffset.UTC)
         val updatedActivation = activationRecord.copy(
             nonce = generateChallengeNonce(),
@@ -97,11 +97,10 @@ class DeviceApprovalService(
             )
         )
 
-        writeActivationState(saved.id!!, challengeLink.challengeId, updatedActivation)
+        writeActivationState(saved.id!!, challengeLink.registrationNonce, updatedActivation)
         publisher.publishChallenge(
             kind = saved.kind,
-            challengeId = challengeLink.challengeId,
-            registrationNonce = updatedActivation.registrationNonce,
+            registrationNonce = challengeLink.registrationNonce,
             nonce = requireNotNull(updatedActivation.nonce),
             issuedAt = updatedActivation.issuedAt,
             expiresAt = updatedActivation.expiresAt
@@ -122,14 +121,14 @@ class DeviceApprovalService(
         requirePending(device)
 
         val challengeLink = readActivationByDevice(device.id!!)
-        readActivationRecord(challengeLink.challengeId)
+        readActivationRecord(challengeLink.registrationNonce)
 
         val saved = deviceRepository.save(
             device.copy(status = DeviceStatus.REJECTED)
         )
-        publisher.publishRejected(saved.kind, challengeLink.challengeId, "admin_rejected")
+        publisher.publishRejected(saved.kind, challengeLink.registrationNonce, "admin_rejected")
         runCatching {
-            deleteActivationState(saved.id!!, challengeLink.challengeId)
+            deleteActivationState(saved.id!!, challengeLink.registrationNonce)
         }.onFailure { ex ->
             log.warn("Failed to clear activation state for rejected device {}", saved.id, ex)
         }
@@ -145,8 +144,8 @@ class DeviceApprovalService(
             .getOrElse { throw ConflictException("Device activation session is malformed") }
     }
 
-    private suspend fun readActivationRecord(challengeId: UUID): DeviceActivationRecord {
-        val key = RedisKeyManager.deviceActivation(challengeId)
+    private suspend fun readActivationRecord(registrationNonce: String): DeviceActivationRecord {
+        val key = RedisKeyManager.deviceActivation(registrationNonce)
         val payload = redis.opsForValue().get(key).awaitSingleOrNull()
             ?: throw DeviceConflictEnvelopeException("activation_session_missing")
         return runCatching { objectMapper.readValue(payload, DeviceActivationRecord::class.java) }
@@ -155,32 +154,32 @@ class DeviceApprovalService(
 
     private suspend fun writeActivationState(
         deviceId: UUID,
-        challengeId: UUID,
+        registrationNonce: String,
         activationRecord: DeviceActivationRecord
     ) {
         val activationJson = objectMapper.writeValueAsString(activationRecord)
         val activationByDeviceJson = objectMapper.writeValueAsString(
-            DeviceActivationByDeviceRecord(challengeId = challengeId)
+            DeviceActivationByDeviceRecord(registrationNonce = registrationNonce)
         )
 
         redis.opsForValue()
-            .set(RedisKeyManager.deviceActivation(challengeId), activationJson, ACTIVATION_TTL)
+            .set(RedisKeyManager.deviceActivation(registrationNonce), activationJson, ACTIVATION_TTL)
             .awaitSingle()
         try {
             redis.opsForValue()
                 .set(RedisKeyManager.deviceActivationByDevice(deviceId), activationByDeviceJson, ACTIVATION_TTL)
                 .awaitSingle()
         } catch (ex: Exception) {
-            redis.delete(RedisKeyManager.deviceActivation(challengeId)).awaitSingleOrNull()
+            redis.delete(RedisKeyManager.deviceActivation(registrationNonce)).awaitSingleOrNull()
             throw ex
         }
     }
 
     private suspend fun deleteActivationState(
         deviceId: UUID,
-        challengeId: UUID
+        registrationNonce: String
     ) {
-        redis.delete(RedisKeyManager.deviceActivation(challengeId)).awaitSingleOrNull()
+        redis.delete(RedisKeyManager.deviceActivation(registrationNonce)).awaitSingleOrNull()
         redis.delete(RedisKeyManager.deviceActivationByDevice(deviceId)).awaitSingleOrNull()
     }
 

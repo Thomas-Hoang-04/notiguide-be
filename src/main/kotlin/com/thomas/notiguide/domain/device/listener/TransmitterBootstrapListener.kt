@@ -18,7 +18,6 @@ import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
-import java.util.UUID
 
 @Component
 @ConditionalOnBean(MqttClientManager::class)
@@ -78,15 +77,15 @@ class TransmitterBootstrapListener(
             return@MqttMessageHandler
         }
 
-        val challengeId = runCatching {
-            UUID.fromString(topic.removePrefix("${mqttProperties.topicPrefix}/transmitter/bootstrap/"))
-        }.getOrNull() ?: return@MqttMessageHandler
+        val registrationNonce = topic
+            .removePrefix("${mqttProperties.topicPrefix}/transmitter/bootstrap/")
+            .takeIf { it.isNotBlank() && it != topic } ?: return@MqttMessageHandler
 
         scope.launch {
             runCatching {
                 deviceActivationService.onResponse(
                     payload = payloadStr,
-                    challengeId = challengeId
+                    registrationNonce = registrationNonce
                 )
             }.onFailure { ex ->
                 log.warn("Transmitter activation response handling failed", ex)
